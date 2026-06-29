@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: bridgecrewio/checkov-action@063da70420ab562cb31f661b374a76b6a42ed6b5 # v12
+      - uses: bridgecrewio/checkov-action@a59d390da81ed70dbf0bced4d76d0c2b3a5dbf6e # v12
         with:
           directory: .
           framework: kubernetes
