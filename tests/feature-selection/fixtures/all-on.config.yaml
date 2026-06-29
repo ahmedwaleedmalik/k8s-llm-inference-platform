@@ -1,0 +1,21 @@
+repoURL: https://github.com/example/repo.git
+cluster: { name: ai-dev, projectID: p, location: us-central1-a }
+domain: "ai.example.com"
+dns: { automate: true, provider: cloudflare, proxied: false }
+features:
+  autoscaling: true
+  kserve: true
+  embeddings: true
+  coding-assistant: true
+  llm-d: true
+  identity: true
+  dns: true
+  public-edge: true
+  experience: true
+  n8n: true
+  demos: true
+  security: true
+  mcp-gateway: true
+  guardrails: true
+  opencost: true
+  egress: true

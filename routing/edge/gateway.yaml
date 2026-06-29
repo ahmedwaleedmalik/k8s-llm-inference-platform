@@ -1,0 +1,131 @@
+# platform-gateway — the public, human/tenant-facing edge, separate from the in-cluster
+# `inference-gateway` (GIE/InferencePool path). Same agentgateway data plane. TLS terminates here.
+# cert-manager.io/cluster-issuer annotation → the gateway-shim provisions one Certificate per HTTPS
+# listener (Secret names below). ai-platform.wmx.dev is replaced by `make fork-init` from config.yaml.
+# Manual-sync (see clusters/.../routing/edge.yaml): a fork with domain:"" never syncs this → Tier 0.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform-gateway
+  namespace: experience
+  annotations:
+    # Cloudflare DNS-01 (this fork's domain is on Cloudflare). Staging first to validate issuance;
+    # flip to letsencrypt-prod-dns01 once a staging cert goes Ready (real, browser-trusted certs).
+    cert-manager.io/cluster-issuer: letsencrypt-prod-dns01
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    # :80 — carries the ACME HTTP-01 challenge route (cert-manager adds it) + the →HTTPS redirect.
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+    # :443 per host (SNI). Each references a Secret cert-manager fills from the annotated issuer.
+    - name: chat-https
+      port: 443
+      protocol: HTTPS
+      hostname: chat.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: chat-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: api-https
+      port: 443
+      protocol: HTTPS
+      hostname: api.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: api-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # Reserved for SSO (ADR-0026): the IdP/forward-auth attaches here on the same gateway.
+    - name: auth-https
+      port: 443
+      protocol: HTTPS
+      hostname: auth.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: auth-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # key-portal: SSO login → LiteLLM vkey. Protected by the gateway forward-auth (extAuthz).
+    - name: portal-https
+      port: 443
+      protocol: HTTPS
+      hostname: portal.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: portal-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # tabby: coding-assistant server/web UI. The IDE Tabby extension points at this host.
+    - name: tabby-https
+      port: 443
+      protocol: HTTPS
+      hostname: tabby.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: tabby-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # n8n: optional manual-sync automation surface. The route lives with the n8n app.
+    - name: n8n-https
+      port: 443
+      protocol: HTTPS
+      hostname: n8n.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: n8n-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    # Admin UIs — exposed publicly; each authenticates via its OWN login (LiteLLM UI key, Dex OIDC for
+    # ArgoCD/Grafana), so no gateway extAuth needed (their login pages are not unauthenticated).
+    # llm.<domain> → LiteLLM admin UI (the /ui dashboard on litellm:4000; the API stays on api.<domain>).
+    - name: llm-https
+      port: 443
+      protocol: HTTPS
+      hostname: llm.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: llm-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: argocd-https
+      port: 443
+      protocol: HTTPS
+      hostname: argocd.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: argocd-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: grafana-https
+      port: 443
+      protocol: HTTPS
+      hostname: grafana.ai-platform.wmx.dev
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grafana-tls
+      allowedRoutes:
+        namespaces:
+          from: All

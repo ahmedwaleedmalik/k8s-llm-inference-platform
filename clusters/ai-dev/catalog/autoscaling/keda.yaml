@@ -1,0 +1,34 @@
+# KEDA — event-driven autoscaler (chart 2.20.1 / appVersion 2.20.1). Wave 1 (with the other
+# operators/CRDs): installs the keda.sh CRDs (ScaledObject/TriggerAuthentication) the raw-vllm
+# ScaledObject (wave 4) depends on. Controller-only, no GPU/workload cost → auto-sync. ADR-0014.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keda
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://kedacore.github.io/charts
+      chart: keda
+      targetRevision: 2.20.1
+      helm:
+        valueFiles:
+          - $values/platform/keda/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: keda
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # KEDA CRDs exceed the client-side apply annotation-size limit

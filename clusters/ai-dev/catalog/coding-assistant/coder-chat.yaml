@@ -1,0 +1,32 @@
+# Coder chat (Qwen2.5-Coder-7B-Instruct AWQ) — GPU serving, manual-sync (cost footgun: no
+# selfHeal on a scaled-down GPU pod). Wave 4: after external-secrets (vllm-api-key, shared) + the
+# observability CRDs. ignoreDifferences keeps replica scaling (vllm-up/down style) from showing OutOfSync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coder-chat
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/coder-chat
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: coder-chat
+      namespace: serving
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true

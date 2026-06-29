@@ -1,0 +1,13 @@
+# Model cache (HF_HOME) for the 1.5B base weights (~3GB). Separate PVC per model.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coder-fim-model-cache
+  namespace: serving
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 10Gi

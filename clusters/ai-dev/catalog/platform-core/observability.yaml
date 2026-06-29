@@ -1,0 +1,36 @@
+# kube-prometheus-stack — cluster metrics + Grafana. Prometheus-native foundation
+# every inference component (DCGM, vLLM, Gateway API Inference Extension) scrapes into.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 86.2.3
+      helm:
+        valueFiles:
+          - $values/platform/observability/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      path: platform/observability/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # Prometheus Operator CRDs exceed the client-side apply limit

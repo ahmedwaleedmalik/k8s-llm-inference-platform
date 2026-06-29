@@ -1,0 +1,35 @@
+# GIE InferencePool + Endpoint Picker (EPP). Wave 3: after the CRDs and the controller.
+# releaseName=vllm-sim names the InferencePool CR (the HTTPRoute backendRef and the
+# InferenceObjective poolRef both reference `vllm-sim`). OCI Helm chart + git values ref.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-pool
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  sources:
+    - repoURL: registry.k8s.io/gateway-api-inference-extension/charts
+      chart: inferencepool
+      targetRevision: v1.5.0
+      helm:
+        releaseName: vllm-sim
+        valueFiles:
+          - $values/routing/gateway-api-inference/inferencepool/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

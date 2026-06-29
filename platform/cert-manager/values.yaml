@@ -1,0 +1,12 @@
+# cert-manager — KServe webhook certs (ADR-0006) + the public-edge TLS: Let's
+# Encrypt certs for the agentgateway HTTPS listeners via the gateway-shim. The chart ships and manages
+# its own CRDs when crds.enabled.
+crds:
+  enabled: true
+
+# Enable the Gateway API integration (GA since cert-manager 1.15): the gateway-shim watches Gateways
+# annotated with cert-manager.io/cluster-issuer and provisions one Certificate per TLS listener.
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true

@@ -1,0 +1,17 @@
+# WorkloadPriorityClass governs Kueue admission/preemption order (distinct from a pod
+# PriorityClass, which governs kube-scheduler preemption). A Job opts in with the label
+# `kueue.x-k8s.io/priority-class`. high-priority can preempt a running low-priority workload
+# for the GPU (withinClusterQueue: LowerPriority on gpu-cq).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: WorkloadPriorityClass
+metadata:
+  name: low-priority
+value: 100
+description: "Best-effort batch GPU work; preemptible."
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: WorkloadPriorityClass
+metadata:
+  name: high-priority
+value: 1000
+description: "Interactive/urgent GPU work; preempts low-priority for the GPU."

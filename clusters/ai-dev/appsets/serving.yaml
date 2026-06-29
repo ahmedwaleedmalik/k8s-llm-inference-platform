@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: layer-serving
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+        revision: main
+        files:
+          - path: clusters/ai-dev/groups.generated.yaml
+      selector:
+        matchLabels:
+          enabled: "true"
+          layer: "serving"
+  template:
+    metadata:
+      name: 'group-{{.name}}'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+      source:
+        repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+        targetRevision: main
+        path: '{{.catalogPath}}'
+        directory:
+          recurse: true
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

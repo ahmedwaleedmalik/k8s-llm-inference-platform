@@ -1,0 +1,28 @@
+# KServe CRDs (InferenceService, ServingRuntime, etc.). Wave 1: after cert-manager, before the
+# controller. Separate chart from the controller so CRDs apply first. ServerSideApply — large CRDs
+# exceed the client-side apply annotation limit (same trap as Kueue/GIE CRDs).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kserve-crd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: platform
+  source:
+    repoURL: ghcr.io/kserve/charts
+    chart: kserve-crd
+    targetRevision: v0.19.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kserve
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

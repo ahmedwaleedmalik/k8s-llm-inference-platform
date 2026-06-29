@@ -1,0 +1,21 @@
+# NVIDIA GPU Operator — self-managed GPU stack for non-GKE substrates (ADR-0001). Deployed
+# ONLY when config.yaml gpu_stack=operator (the gpu-operator group; resolve-groups). On GKE the stack is
+# node-image-managed and this app does not exist. Operand versions come from the pinned chart — do not
+# pin them here.
+#
+# On a CPU-only cluster (e.g. the Hetzner portability proof) the operand DaemonSets (driver, toolkit,
+# device-plugin, dcgm-exporter, gfd) are gated by NFD onto GPU nodes (feature.node.kubernetes.io/pci-10de
+# .present), so they resolve to 0 pods and the app is still Synced+Healthy — it validates the GitOps
+# wiring; live GPU telemetry needs a real GPU node.
+driver:
+  enabled: true   # operator compiles + loads the NVIDIA kernel driver. Node prereqs: matching kernel
+                  # headers, Secure Boot off (Ada). On managed driver images set this false.
+toolkit:
+  enabled: true   # container-toolkit registers the `nvidia` containerd runtime
+# device-plugin, gpu-feature-discovery, node-feature-discovery, and dcgm-exporter are on by chart
+# default. Enable dcgm-exporter's ServiceMonitor here; the in-cluster Prometheus
+# (platform/observability) discovers it cluster-wide (serviceMonitorSelectorNilUsesHelmValues: false),
+# so platform/dcgm-metrics renders no scrape object in the operator case (resolve-gpu).
+dcgmExporter:
+  serviceMonitor:
+    enabled: true

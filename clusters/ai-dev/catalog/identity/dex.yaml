@@ -1,0 +1,37 @@
+# Dex — central OIDC issuer (ADR-0026). Auto-sync; feature-gated via resolve-groups (only present when
+# domain + dns/identity are enabled) so it stays opt-in without a manual sync step. Multi-source: the
+# Dex chart + git values + the ESO secret & auth HTTPRoute. Wave 4: after ESO config, before login
+# dependents such as oauth2-proxy, Argo CD OIDC, key-portal, n8n, and Open WebUI.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dex
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://charts.dexidp.io
+      chart: dex
+      targetRevision: 0.24.1
+      helm:
+        valueFiles:
+          - $values/platform/dex/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      path: platform/dex/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dex
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

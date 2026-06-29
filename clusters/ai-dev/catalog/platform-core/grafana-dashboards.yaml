@@ -1,0 +1,26 @@
+# Grafana dashboards as code — kustomize turns dashboards/*.json into labelled ConfigMaps the
+# kube-prometheus-stack Grafana sidecar auto-imports.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-dashboards
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3" # after Grafana (wave 2) is up
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: dashboards
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

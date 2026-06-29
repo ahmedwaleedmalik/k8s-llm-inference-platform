@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: experience
+resources:
+  - pvc.yaml
+  - config.yaml
+  - deployment.yaml
+  - service.yaml
+  # DOCUMENTED EXCEPTION to gateway forward-auth: Tabby IDE clients use Bearer tokens, so do not put
+  # oauth2-proxy/extAuth in front of this route. Tabby Enterprise has native OIDC, configured in Tabby's
+  # DB-backed Integrations > SSO UI; the Dex tabby client is only the IdP prerequisite. Until native SSO
+  # is configured, access is Tabby's own first-run admin account + per-client registration token.
+  # OPERATOR ACTION: create the Tabby admin account immediately after deploy to close first-run signup.
+  - httproute.yaml

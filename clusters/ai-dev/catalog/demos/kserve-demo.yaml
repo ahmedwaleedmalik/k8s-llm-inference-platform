@@ -1,0 +1,26 @@
+# KServe demo: the ingress Gateway, the vLLM-CPU ServingRuntime, and the Qwen2.5-0.5B
+# InferenceService. Wave 4 (workload) — after the KServe controller + CRDs (waves 1-2). Plain
+# kustomize, like inference-demo.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kserve-demo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/kserve
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kserve
+  # Manual-sync: a serving workload brought up deliberately; selfHeal off so the
+  # idle-pause stop annotation (runbook kserve.md §8) isn't reverted. See staged-bring-up.md.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

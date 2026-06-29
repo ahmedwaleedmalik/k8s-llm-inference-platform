@@ -1,0 +1,36 @@
+# KServe llmisvc controller + conversion webhook (powers LLMInferenceService prefill/decode disaggregation).
+# Required for serving/llm-d (#5). Proven live on 2x-GPU k3s.
+#
+# kserve-resources owns the shared ConfigMap/Issuer/ClusterStorageContainer. Keep the LLMISVC chart
+# focused on the controller/webhooks/CRDs so Argo does not fight over shared resources.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kserve-llmisvc
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: ghcr.io/kserve/charts
+      chart: kserve-llmisvc-resources
+      targetRevision: v0.19.0
+      helm:
+        valueFiles:
+          - $values/platform/kserve/llmisvc-values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kserve
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

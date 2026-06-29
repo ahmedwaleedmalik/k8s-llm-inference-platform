@@ -1,0 +1,23 @@
+# External-provider egress (ADR-0013 Amendment). agentgateway's AIProvider path: this backend takes
+# OpenAI /v1/chat/completions, translates to Anthropic /v1/messages, and normalizes the reply back to
+# OpenAI shape WITH a `usage` object — so LiteLLM keeps computing spend (usage x its pricing table).
+# This is the NORMALIZING-EGRESS role, NOT the GIE/InferencePool role: external SaaS has no KV-cache
+# or queue to observe, so it deliberately does not go through an InferencePool (ADR: "keep the two
+# roles honest"). Adding OpenAI/Gemini/Bedrock = another AgentgatewayBackend with the same shape.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: anthropic
+  namespace: agentgateway-system
+spec:
+  ai:
+    provider:
+      anthropic:
+        model: claude-haiku-4-5
+  policies:
+    auth:
+      # agentgateway reads the `Authorization` key from this Secret and presents it upstream as
+      # Anthropic's `x-api-key`. The provider key lives in the data plane that makes the call —
+      # LiteLLM never holds it (ADR: "places upstream provider keys in the data plane").
+      secretRef:
+        name: anthropic-api-key

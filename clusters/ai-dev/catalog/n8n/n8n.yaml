@@ -1,0 +1,26 @@
+# n8n workflow automation: optional, manual-sync. Manifests are chart-derived from the official n8n
+# Helm chart, then hardened locally because the chart does not expose readOnlyRootFilesystem.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: experience/n8n/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: n8n
+  # Manual-sync: n8n is an automation surface with persistent state and public ingress. Enabling the
+  # feature creates the Application, but an operator must explicitly sync it after secrets are seeded.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

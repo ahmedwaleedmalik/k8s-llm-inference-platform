@@ -1,0 +1,3 @@
+# Minimal fixture that catches greedy feature parsing when comments repeat the key name.
+features:
+  guardrails: true        # guardrails: enable tenant-edge filters

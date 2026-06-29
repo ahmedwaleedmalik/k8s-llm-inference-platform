@@ -1,0 +1,34 @@
+# agentgateway controller + data-plane. Wave 2: after its CRDs and the Gateway API CRDs.
+# inferenceExtension.enabled (values) turns it into an Inference Gateway that routes to
+# InferencePool backends. OCI Helm chart + git values ref (same multi-source pattern as kueue).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: platform
+  sources:
+    - repoURL: cr.agentgateway.dev/charts
+      chart: agentgateway
+      targetRevision: v1.2.1
+      helm:
+        valueFiles:
+          - $values/routing/gateway-api-inference/agentgateway/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agentgateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

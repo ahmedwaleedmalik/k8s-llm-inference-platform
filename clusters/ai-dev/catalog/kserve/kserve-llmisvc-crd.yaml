@@ -1,0 +1,28 @@
+# KServe LLM serving CRDs (LLMInferenceService + LLMInferenceServiceConfig). SEPARATE from kserve-crd —
+# the classic kserve-crd chart does NOT ship these (verified v0.19.0). Required for serving/llm-d (#5).
+# Large alpha CRDs => ServerSideApply (same trap as kserve-crd / GIE CRDs).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kserve-llmisvc-crd
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: ghcr.io/kserve/charts
+    chart: kserve-llmisvc-crd
+    targetRevision: v0.19.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kserve
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

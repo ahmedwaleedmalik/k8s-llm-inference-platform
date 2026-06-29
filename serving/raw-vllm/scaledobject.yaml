@@ -1,0 +1,45 @@
+# KEDA queue-depth autoscaling for raw-vLLM (ADR-0014). Scales on vLLM's request-queue gauge
+# (vllm:num_requests_waiting) — the documented 2026 default; GPU-util is pegged ~100% under
+# PagedAttention and is useless as a signal, and request concurrency is a poor load proxy.
+#
+# PAUSED BY DEFAULT. A live ScaledObject owns /spec/replicas: an unpaused minReplicaCount>0 would
+# pin an L4 node up 24/7 (~$240/mo) and fight `make vllm-down`. This repo runs $0-idle, so the
+# object ships paused — KEDA does not touch replicas while paused, so `make vllm-up/down` work
+# exactly as before. Un-pause only for a load-test session (`make keda-demo-up`; runbook
+# keda-autoscaling.md), then re-pause + `make vllm-down`. The min/maxReplicaCount below are the
+# "when turned on" config; on this single-GPU lab (GPUS_ALL_REGIONS=1) effective max is 1 — true
+# 1→N scale-out is proven on the free CPU sim (runbook §3). min/max are profile knobs:
+# prod min 2 (HA) · dev min 1 · cost min 0 (needs KEDA HTTP Add-on; GIE returns 503 at 0 endpoints).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: raw-vllm
+  namespace: serving
+  annotations:
+    autoscaling.keda.sh/paused: "true"
+spec:
+  scaleTargetRef:
+    name: raw-vllm
+  pollingInterval: 15
+  cooldownPeriod: 300 # hold 5 min before scaling in — LLM cold-start ≫ HPA reaction; avoid flapping
+  minReplicaCount: 1
+  maxReplicaCount: 3 # capped by GPU quota (=1 on this lab); illustrative prod ceiling
+  fallback:
+    failureThreshold: 3
+    replicas: 1 # if Prometheus is unreachable, hold a single warm replica rather than scaling wild
+  triggers:
+    # Primary: total queued requests / threshold → desired replicas (AverageValue, ~5 queued/replica).
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        metricName: vllm_num_requests_waiting
+        query: sum(vllm:num_requests_waiting{namespace="serving"})
+        threshold: "5"
+    # Secondary: KV-cache pressure. vLLM V1 renamed gpu_cache_usage_perc → kv_cache_usage_perc;
+    # confirm against live /metrics before trusting (servicemonitor.yaml notes the V1 renames).
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        metricName: vllm_kv_cache_usage_perc
+        query: sum(vllm:kv_cache_usage_perc{namespace="serving"})
+        threshold: "0.9"

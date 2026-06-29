@@ -1,0 +1,23 @@
+# Body-Based Routing (BBR). Gateway API HTTPRoute can only match on headers/path, not the JSON
+# body — but OpenAI clients put the model in the body. This PreRouting policy runs before route
+# matching, reads `model` out of the request body via CEL, and copies it into the
+# X-Gateway-Base-Model-Name header the HTTPRoute then matches on. Passthrough (no lookup map)
+# because we have no LoRA adapters to alias onto a base model; an unknown model name therefore
+# matches no HTTPRoute rule and gets a clean 404 — which is the proof that routing is by model
+# name, not a catch-all. agentgateway implements GIE's BBR natively, so no separate ext-proc.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: bbr
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+  traffic:
+    phase: PreRouting
+    transformation:
+      request:
+        set:
+          - name: X-Gateway-Base-Model-Name
+            value: string(json(request.body).model)

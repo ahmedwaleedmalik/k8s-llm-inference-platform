@@ -1,0 +1,26 @@
+# Kueue queue topology (ResourceFlavor / ClusterQueue / LocalQueues / WorkloadPriorityClasses
+# + tenant namespaces). Wave 3: after the Kueue controller + CRDs (wave 2). SkipDryRunOnMissingResource
+# lets the FIRST sync succeed before the kueue.x-k8s.io CRDs are Established; selfHeal is the backstop.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kueue-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/kueue-config
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true

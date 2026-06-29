@@ -1,0 +1,16 @@
+# In-cluster OpenAI-compatible endpoint for the coder agent model. LiteLLM routes to this Service
+# (model alias coder-agent). No domain yet (config.yaml domain: "").
+apiVersion: v1
+kind: Service
+metadata:
+  name: coder-agent
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: coder-agent
+spec:
+  selector:
+    app.kubernetes.io/name: coder-agent
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

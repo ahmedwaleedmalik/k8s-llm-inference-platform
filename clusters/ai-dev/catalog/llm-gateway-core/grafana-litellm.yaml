@@ -1,0 +1,26 @@
+# LiteLLM spend datasource + dashboard. Lives in the llm-gateway layer so the base
+# platform profile does not depend on LiteLLM/Grafana read-only DB secrets.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-litellm
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5" # after Grafana and LiteLLM bootstrap secrets
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: dashboards/litellm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

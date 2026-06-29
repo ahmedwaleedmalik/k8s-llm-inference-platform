@@ -1,0 +1,29 @@
+# external-dns (Tier 1b) — auto-manages DNS records from the agentgateway HTTPRoutes.
+# This values file is the CLOUDFLARE path (dns.provider: cloudflare). A google/Cloud-DNS fork swaps
+# provider: {name: google} + drops the env token (keyless via Workload Identity, like ESO).
+# Manual-sync app → only runs when a fork opts in (dns.automate: true).
+provider:
+  name: cloudflare
+
+# Read hostnames off the Gateway-API HTTPRoutes + their parent Gateway's status address.
+sources:
+  - gateway-httproute
+
+# sync (not upsert-only) so stale records are pruned when a host is removed. TXT registry tags
+# ownership so external-dns never touches records it didn't create.
+policy: sync
+registry: txt
+txtOwnerId: ai-dev-edge
+
+# Cloudflare API token (Zone:Read + DNS:Edit), ESO-synced into this namespace (see manifests/).
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+# Records are DNS-only (unproxied) by default — grey-cloud, so the gateway terminates Let's Encrypt
+# TLS. (Don't pass --cloudflare-proxied=false; the chart splits it and external-dns rejects it.)
+# extraArgs:
+#   - --zone-id-filter=<your-cloudflare-zone-id>   # optional: restrict to one zone

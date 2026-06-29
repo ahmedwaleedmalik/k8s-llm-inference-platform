@@ -1,0 +1,9 @@
+# Example multi-tenant queues (demos layer). team-a/team-b namespaces + their LocalQueue handles
+# onto the shared gpu-cq ClusterQueue (platform/kueue-config). Split out of the platform substrate
+# per ADR-0027 so the base `platform` profile ships only the cluster-scoped quota pool,
+# not example tenants. The kueue-demo Jobs (workloads/kueue-demo) run in these namespaces.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - localqueues.yaml

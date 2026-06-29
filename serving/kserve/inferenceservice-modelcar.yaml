@@ -1,0 +1,114 @@
+# GPU InferenceService served from a digest-pinned OCI modelcar (ADR-0016) — the cloud-
+# agnostic, big-model-ready model-delivery default. Same Qwen2.5-0.5B / vLLM v0.23.0 engine as the
+# qwen-cpu demo, but: GPU (CUDA image, not -cpu), weights delivered as an `oci://` artifact instead
+# of a pre-staged PVC, and HF fully offline (zero egress). KServe sees `storageUri: oci://...` and
+# auto-injects the modelcar sidecar+init, `spec.shareProcessNamespace: true`, the shared /mnt volume
+# and the `ln -sf` symlink, and `runAsUser=1010` into the container named `kserve-container`. We do
+# NOT hand-write those (research §2). vLLM then reads the symlinked weights at --model=/mnt/models.
+#
+# !!! BEFORE THIS WORKS ON A CLUSTER !!!
+#   1. storageUri below is a PLACEHOLDER. Build the image (`make modelcar-build`) and replace the
+#      registry + @sha256 digest with the value the build prints. Never serve a tag/:latest — a
+#      digest pins IfNotPresent (node-cached); a tag forces Always (re-pulls the multi-GB image).
+#   2. RESOLVED (scratch-ns smoke): a CUSTOM-container modelcar wires /mnt/models via the
+#      STORAGE_URI env on kserve-container (below) — NOT predictor.model.storageUri (the webhook
+#      rejects `model` + `containers` together: "exactly one of [Model, StorageUris, ...]") and NOT
+#      the serving.kserve.io/storageUri annotation (no injection). With STORAGE_URI set, KServe
+#      injects the modelcar sidecar + init-container + the /mnt/models symlink. Runbook: kserve-modelcar.md.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen-oci
+  namespace: kserve
+spec:
+  predictor:
+    # Scale-to-zero: lab cost knob (the GPU node releases when idle). PRODUCT floor is a profile
+    # decision (see ADR-0014) — NOT a design limit. Scale-to-zero here
+    # also deletes the node + its node-warm cache, which is why LocalModelCache is sequenced
+    # later, not demoted.
+    minReplicas: 0
+    maxReplicas: 1
+    # Recreate (not RollingUpdate): a single GPU slot can't host a surge pod during rollout — the
+    # second replica would deadlock on Insufficient nvidia.com/gpu. Kill old, then start new (same
+    # single-slot reasoning as qwen-cpu + raw-vllm).
+    deploymentStrategy:
+      type: Recreate
+    containers:
+      - name: kserve-container
+        image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+        args:
+          - "--model=/mnt/models"
+          - "--served-model-name=qwen2.5-0.5b-instruct"
+          - "--port=8080"
+          # ADR-0025 runtime lever: 0.6 is conservative-safe; 0.7-0.8 is the CEILING — going higher
+          # starves the transient startup VRAM (CUDA-graph capture / activation buffers) and trips
+          # startup OOM before /health ever passes.
+          - "--gpu-memory-utilization=0.6"
+          - "--max-model-len=8192"
+        env:
+          # Custom-container modelcar wires off STORAGE_URI (validated scratch-ns smoke):
+          # KServe injects the modelcar sidecar + init + /mnt/models symlink. This is the public
+          # prebuilt default (Qwen2.5-0.5B-Instruct, Apache-2.0) so a fork serves with no build step.
+          # To serve a different model, `make modelcar-build` and pin your own @sha256 digest here
+          # (never a tag/:latest: a digest pins IfNotPresent; a tag forces Always + re-pulls the image).
+          - name: STORAGE_URI
+            value: "oci://ghcr.io/ahmedwaleedmalik/qwen2.5-0.5b@sha256:34b60dd91a65b747946472a3b900da4eb9c35da90e53169ad4c4b17c13941518"
+          - name: HF_HUB_OFFLINE
+            value: "1"
+          - name: TRANSFORMERS_OFFLINE
+            value: "1"
+          # ADR-0025 runtime lever: tiny default /dev/shm makes NCCL fall back / hang during init.
+          # We mount a 16Gi tmpfs /dev/shm below AND disable cuMem allocation, the known-good combo.
+          - name: NCCL_CUMEM_ENABLE
+            value: "0"
+          # KServe runs the predictor as a non-root UID with no /etc/passwd entry; vLLM's
+          # getpass.getuser() reads $USER before falling back to getpwuid() (which KeyErrors → crash).
+          - name: USER
+            value: "vllm"
+          # Same non-root cause: HOME is unset → ~/.cache resolves to /.cache (unwritable). flashinfer
+          # + torch.compile mkdir their workspace under $HOME; point it at a writable dir.
+          - name: HOME
+            value: "/tmp"
+        volumeMounts:
+          # ADR-0025 runtime lever: real /dev/shm (16Gi tmpfs) — avoids the NCCL-on-tiny-shm hang.
+          - name: dshm
+            mountPath: /dev/shm
+          # ADR-0025 runtime lever: torch.compile / HF cache. emptyDir here is per-pod (cleared on
+          # restart). In PRODUCTION back this with a persistent volume so CUDA-graph compilation is
+          # not re-captured on every cold start (saves >10s per boot).
+          - name: compile-cache
+            mountPath: /root/.cache
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 60
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 60
+        resources:
+          requests:
+            cpu: "1"
+            memory: 4Gi
+          limits:
+            nvidia.com/gpu: "1"
+            memory: 12Gi
+    # ADR-0025 runtime levers (pod-level volumes for the kserve-container mounts above). We add ONLY
+    # the volumes; shareProcessNamespace + securityContext stay webhook-injected (ADR-0016), not
+    # hand-written here.
+    volumes:
+      # 16Gi tmpfs /dev/shm — sized into the pod's memory limit; pairs with NCCL_CUMEM_ENABLE=0.
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Gi
+      # torch.compile / HF cache. Per-pod emptyDir in the lab; persist across restarts in production.
+      - name: compile-cache
+        emptyDir: {}

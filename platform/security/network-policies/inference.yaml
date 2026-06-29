@@ -1,0 +1,35 @@
+# SR1 (ADR-0029) — the inference namespace holds the GIE Gateway (inference-gateway) + Endpoint
+# Picker that LiteLLM targets for qwen-local. Lock it to the budget path: default-deny ingress, then
+# allow ONLY LiteLLM (the sole authorized caller), the agentgateway data-plane controller, and
+# Prometheus. A tenant pod therefore cannot curl the inference gateway directly — it must go through
+# LiteLLM. See serving.yaml for the CNI-enforcement caveat (Dataplane-V2 on GKE).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: inference-default-deny-ingress
+  namespace: inference
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: inference-allow-trusted-ingress
+  namespace: inference
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: litellm
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentgateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring

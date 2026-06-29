@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  # Keep the project even if its last Application is pruned.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: k8s-llm-inference-platform — GitOps source + destination guardrail for all layers
+  sourceRepos:
+    # This repo (the canonical URL; `make fork-init` rewrites it across the tree on a fork).
+    - https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    - https://argoproj.github.io/argo-helm
+    - quay.io/jetstack/charts
+    - https://charts.external-secrets.io
+    - https://prometheus-community.github.io/helm-charts
+    - https://opencost.github.io/opencost-helm-chart
+    - https://kedacore.github.io/charts
+    - registry.k8s.io/kueue/charts
+    - registry.k8s.io/gateway-api-inference-extension/charts
+    - cr.agentgateway.dev/charts
+    - ghcr.io/kserve/charts
+    - https://github.com/kserve/kserve
+    - https://nvidia.github.io/gpu-operator
+    - ghcr.io/cloudnative-pg/charts
+    - ghcr.io/berriai
+    - ghcr.io/ahmedwaleedmalik/charts
+    - https://kyverno.github.io/kyverno/
+    - https://charts.dexidp.io
+    - https://oauth2-proxy.github.io/manifests
+    - https://kubernetes-sigs.github.io/external-dns/
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

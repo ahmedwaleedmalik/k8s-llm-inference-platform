@@ -1,0 +1,49 @@
+# team-b GPU job (low priority). With team-a already holding the single GPU's quota, Kueue
+# leaves this one suspended — its Workload stays Pending ("couldn't assign flavors ... insufficient
+# quota") until team-a finishes. Flip the priority-class label to `high-priority` to instead
+# preempt team-a for the GPU (see README).
+#   kubectl apply -f workloads/kueue-demo/job-team-b.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-job-b
+  namespace: team-b
+  labels:
+    kueue.x-k8s.io/queue-name: team-b-gpu
+    kueue.x-k8s.io/priority-class: low-priority
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=batch Job holds the GPU then exits; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=batch Job holds the GPU then exits; no service endpoint to readiness-probe
+spec:
+  parallelism: 1
+  completions: 1
+  suspend: true
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: burn
+          image: nvidia/cuda:12.4.0-base-ubuntu22.04@sha256:80d4d9ac041242f6ae5d05f9be262b3374e0e0b8bb5a49c6c3e94e192cde4a44
+          imagePullPolicy: Always
+          command: ["bash", "-c", "nvidia-smi; echo 'team-b holding the GPU'; sleep 600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "1"
+              memory: 2Gi

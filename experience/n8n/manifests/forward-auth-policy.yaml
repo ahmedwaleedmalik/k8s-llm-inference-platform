@@ -1,0 +1,40 @@
+# n8n dashboard SSO gate. OSS n8n still keeps its internal login, but the public route is fail-closed
+# behind the platform Dex/oauth2-proxy forward-auth before any n8n page is served.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: n8n-forward-auth
+  namespace: n8n
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: n8n
+  traffic:
+    extAuth:
+      failureMode: FailClosed
+      backendRef:
+        group: ""
+        kind: Service
+        name: oauth2-proxy
+        namespace: oauth2-proxy
+        port: 80
+      http:
+        path: '"/oauth2/auth"'
+        redirect: '"https://portal.ai-platform.wmx.dev/oauth2/start?rd=https://n8n.ai-platform.wmx.dev" + request.path'
+        allowedRequestHeaders: ["cookie", "authorization"]
+        allowedResponseHeaders: ["x-auth-request-email", "x-auth-request-user"]
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: n8n-to-oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  from:
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+      namespace: n8n
+  to:
+    - group: ""
+      kind: Service

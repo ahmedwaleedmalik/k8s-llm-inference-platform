@@ -1,0 +1,3 @@
+cluster: { projectID: ai-lab }
+secret_backend: vault
+secret_store_auth: workload-identity

@@ -1,0 +1,64 @@
+# Secrets / credentials — never publish
+*.secret.yaml
+*-secret.yaml
+secrets/
+*.key
+*.pem
+*.agekey
+age.key
+kubeconfig.hetzner
+
+# GCP service-account JSON keys (off-GKE secret-store auth) — *.key won't match .json
+sa-key.json
+*-sa-key.json
+*sa-key*.json
+.env
+.env.*
+kubeconfig
+*.kubeconfig
+gke_gcloud_auth_plugin_cache
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+create.log
+
+docs/research/
+docs/private/
+docs/journal/
+docs/diagrams/
+
+# Helm packaged charts
+**/charts/*.tgz
+# kustomize --enable-helm extracts charts here at build time (Argo re-pulls); do not vendor
+platform/kueue/charts/
+
+# OS / editor
+.DS_Store
+*.swp
+*.bak
+*.orig
+*.tmp
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local git worktrees
+.worktrees/
+
+# Docs site build artifacts
+site/
+.venv-docs/
+docs/public/.venv/
+
+# AI
+.superpowers/
+.audit/

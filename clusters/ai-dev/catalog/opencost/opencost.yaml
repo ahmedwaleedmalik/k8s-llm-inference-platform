@@ -1,0 +1,35 @@
+# OpenCost (chart 2.5.23) — real infrastructure cost allocation: GPU/CPU/memory/storage dollars per
+# workload and namespace, queried from the in-cluster Prometheus. Complements the LiteLLM token-spend
+# dashboard (a usage proxy) with actual GPU-hours/$, closing "token spend != GPU cost". Feature-gated
+# (`opencost`); wave 2, after Prometheus comes up (observability, wave 1). Controller-only, no GPU/
+# workload cost of its own -> auto-sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opencost
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://opencost.github.io/opencost-helm-chart
+      chart: opencost
+      targetRevision: 2.5.23
+      helm:
+        valueFiles:
+          - $values/platform/opencost/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opencost
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

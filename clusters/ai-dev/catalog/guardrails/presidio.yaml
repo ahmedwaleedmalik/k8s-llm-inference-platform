@@ -1,0 +1,32 @@
+# Guardrails profile (ADR-0034) — OPT-IN (`features.guardrails: true`), part of the LiteLLM tenant edge.
+# Deploys Presidio (analyzer + anonymizer) that back the `presidio` PII-masking guardrail; the matching
+# LiteLLM guardrails config is injected via clusters/ai-dev/litellm-guardrails.generated.yaml (approach a,
+# resolve-guardrails.sh), so disabling the feature cleanly removes both Presidio AND the LiteLLM config.
+#
+# Wave 4 (with the LiteLLM proxy): Presidio has no hard dependency on LiteLLM, and LiteLLM tolerates a
+# not-yet-Ready analyzer for MASK-only entities (fail-open on analyzer error; BLOCK entities would
+# fail-closed). PII masking takes effect once analyzer+anonymizer report Ready.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guardrails
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/guardrails
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: guardrails
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

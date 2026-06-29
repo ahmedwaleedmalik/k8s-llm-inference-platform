@@ -1,0 +1,45 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-datasource-litellm
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: secret-store
+  target:
+    name: grafana-datasource-litellm
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      metadata:
+        labels:
+          grafana_datasource: "1"
+      data:
+        litellm-spend.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: litellm-spend
+              uid: litellm-spend
+              type: postgres
+              access: proxy
+              url: litellm-pg-rw.litellm.svc:5432
+              user: grafana_ro
+              jsonData:
+                database: litellm
+                sslmode: require
+                postgresVersion: 1600
+              secureJsonData:
+                password: "{{ .password }}"
+              editable: false
+  data:
+    - secretKey: password
+      remoteRef:
+        key: litellm-grafana-ro-password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore

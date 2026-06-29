@@ -1,0 +1,26 @@
+# Routing demo workloads. Wave 4: after the pool/EPP + the shared front door (inference-gateway,
+# routing layer) exist. The vLLM sim backend (3 replicas, $0-GPU), the sim HTTPRoute →
+# InferencePool, and the InferenceObjective priorities.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-demo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/gateway-api-inference/demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference
+  # Manual-sync: a demo workload (sim backends) brought up deliberately, not auto-healed.
+  # See staged-bring-up.md.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

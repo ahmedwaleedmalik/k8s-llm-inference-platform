@@ -1,0 +1,26 @@
+cluster:
+  name: ai-dev
+  projectID: test-project
+  location: us-central1-a
+repoURL: https://github.com/example/platform.git
+repoBranch: main
+domain: ""
+dns:
+  provider: none
+gpu_stack: gke-managed
+features:
+  autoscaling: false
+  kserve: false
+  embeddings: false
+  coding-assistant: false
+  llm-d: false
+  identity: false
+  dns: false
+  public-edge: false
+  experience: false
+  demos: false
+  security: false
+  opencost: false
+  mcp-gateway: false
+  guardrails: true        # guardrails: enable tenant-edge filters
+  egress: false

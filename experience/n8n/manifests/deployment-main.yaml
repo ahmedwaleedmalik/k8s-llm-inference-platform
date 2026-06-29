@@ -1,0 +1,184 @@
+# Hardened override for the official chart's main Deployment. Keep name/labels/selectors aligned with
+# chart 1.10.0 (`n8n-main`) so the chart's Service, PVC, ConfigMap, and SA remain the source for the
+# surrounding objects while this workload can run with readOnlyRootFilesystem.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-main
+  namespace: n8n
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    checkov.io/skip1: CKV_K8S_40=n8n image runs as its built-in node user UID 1000; a high UID breaks file ownership
+    checkov.io/skip2: CKV_K8S_35=n8n accepts configuration and secrets only via environment variables
+  labels:
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/instance: n8n
+    app.kubernetes.io/component: main
+    app.kubernetes.io/part-of: llm-platform
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: n8n
+      app.kubernetes.io/instance: n8n
+      app.kubernetes.io/component: main
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: n8n
+        app.kubernetes.io/instance: n8n
+        app.kubernetes.io/component: main
+        app.kubernetes.io/part-of: llm-platform
+    spec:
+      serviceAccountName: n8n
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: n8n-main
+          image: docker.n8n.io/n8nio/n8n:2.27.4@sha256:cf11c96b0d0089bb24459bf97b445fd7008f41543b673cce4d955f7c0ed8752d
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5678
+          env:
+            - name: HOME
+              value: /home/node
+            - name: N8N_USER_FOLDER
+              value: /home/node/.n8n
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: n8n
+                  key: TZ
+            - name: DB_TYPE
+              valueFrom:
+                configMapKeyRef:
+                  name: n8n
+                  key: DB_TYPE
+            - name: WEBHOOK_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: n8n
+                  key: WEBHOOK_URL
+            - name: N8N_WEBHOOK_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: n8n
+                  key: N8N_WEBHOOK_TIMEOUT
+            - name: N8N_EDITOR_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: n8n
+                  key: N8N_EDITOR_BASE_URL
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-core-secrets
+                  key: N8N_ENCRYPTION_KEY
+            - name: N8N_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-core-secrets
+                  key: N8N_HOST
+            - name: N8N_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-core-secrets
+                  key: N8N_PORT
+            - name: N8N_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-core-secrets
+                  key: N8N_PROTOCOL
+            - name: OPENAI_API_BASE_URL
+              value: http://litellm.litellm.svc.cluster.local:4000/v1
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-litellm-secrets
+                  key: LITELLM_VKEY
+            - name: EXECUTIONS_DATA_SAVE_ON_ERROR
+              value: all
+            - name: EXECUTIONS_DATA_SAVE_ON_SUCCESS
+              value: none
+            - name: EXECUTIONS_DATA_SAVE_ON_PROGRESS
+              value: "false"
+            - name: EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS
+              value: "true"
+            - name: EXECUTIONS_DATA_PRUNE
+              value: "true"
+            - name: EXECUTIONS_DATA_MAX_AGE
+              value: "168"
+            - name: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+              value: "1000"
+            - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
+              value: "true"
+            - name: N8N_DIAGNOSTICS_ENABLED
+              value: "false"
+            - name: N8N_VERSION_NOTIFICATIONS_ENABLED
+              value: "false"
+            - name: N8N_TEMPLATES_ENABLED
+              value: "false"
+            - name: N8N_HIRING_BANNER_ENABLED
+              value: "false"
+            - name: N8N_PROXY_HOPS
+              value: "1"
+            - name: N8N_SECURE_COOKIE
+              value: "true"
+            - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+              value: "true"
+            - name: N8N_RESTRICT_FILE_ACCESS_TO
+              value: /home/node/.n8n
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /home/node/.n8n
+            - name: cache
+              mountPath: /home/node/.cache
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz/readiness, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: n8n
+        - name: cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

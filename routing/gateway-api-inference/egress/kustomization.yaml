@@ -1,0 +1,11 @@
+# Unified external egress (ADR-0013 Amendment): the AIProvider backends + their ESO-synced keys +
+# the model-matched HTTPRoutes that send external traffic through the SAME inference-gateway front
+# door as local vLLM. All in agentgateway-system (data-plane namespace); routes attach cross-ns to
+# the gateway in `inference`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agentgateway-system
+resources:
+  - externalsecret-anthropic.yaml
+  - anthropic-backend.yaml
+  - httproute-anthropic.yaml

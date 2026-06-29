@@ -1,0 +1,127 @@
+# Concurrency sweep against any OpenAI-compatible endpoint via vLLM's `vllm bench serve`
+# (TTFT/TPOT/ITL/throughput). Run manually: `make bench` (after `make vllm-up`).
+# Target-agnostic (defaults raw-vllm; also KServe / LiteLLM): the optional `bench-target` ConfigMap
+# (BASE_URL/BENCH_MODEL/TOKENIZER/ENDPOINT) + `bench-target-auth` Secret (OPENAI_API_KEY) override.
+#
+# Prefers the raw-vllm node (soft affinity) to reuse the cached image and keep the client->server
+# hop on-node, so numbers reflect the server not the network; still schedules for non-raw-vllm targets.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vllm-bench
+  namespace: serving
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=run-to-completion benchmark Job; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=run-to-completion benchmark Job; no service endpoint to readiness-probe
+    checkov.io/skip3: CKV_K8S_35=bearer token must reach the OpenAI client via the OPENAI_API_KEY env var; file-mounted secrets are not supported
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm-bench
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: raw-vllm
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: bench
+          image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+          imagePullPolicy: Always
+          env:
+            # raw-vllm bearer; a LiteLLM vkey via the optional `bench-target-auth` Secret wins (envFrom below).
+            - name: DEFAULT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-key
+                  key: api-key
+            # readOnlyRootFilesystem: the tokenizer download + results land on the writable /tmp emptyDir.
+            - name: HF_HOME
+              value: /tmp/hf
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - configMapRef:
+                name: bench-target
+                optional: true
+            - secretRef:
+                name: bench-target-auth
+                optional: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              BASE_URL="${BASE_URL:-http://raw-vllm:8000}"
+              BENCH_MODEL="${BENCH_MODEL:-qwen2.5-0.5b-instruct}"
+              TOKENIZER="${TOKENIZER:-Qwen/Qwen2.5-0.5B-Instruct}"
+              ENDPOINT="${ENDPOINT:-/v1/chat/completions}"
+              export OPENAI_API_KEY="${OPENAI_API_KEY:-$DEFAULT_API_KEY}"
+              echo "target: $BASE_URL  model: $BENCH_MODEL  endpoint: $ENDPOINT"
+              RES=/tmp/res; mkdir -p "$RES"
+              COMMON="--backend openai-chat --base-url $BASE_URL \
+                --endpoint $ENDPOINT \
+                --model $BENCH_MODEL --tokenizer $TOKENIZER \
+                --dataset-name random --random-input-len 256 --random-output-len 128 \
+                --ignore-eos --seed 42 --request-rate inf \
+                --percentile-metrics ttft,tpot,itl,e2el --metric-percentiles 50,95,99 \
+                --save-result --result-dir $RES"
+              for C in 1 2 4 8 16 32; do
+                N=$(( C*20 )); [ "$N" -gt 320 ] && N=320
+                echo "===== max-concurrency=$C num-prompts=$N ====="
+                vllm bench serve $COMMON --max-concurrency "$C" --num-prompts "$N" \
+                  --result-filename "c${C}.json"
+              done
+              echo "RESULTS_TABLE_BEGIN"
+              python3 - "$RES" <<'PY'
+              import json, glob, os, sys
+              rows=[]
+              for f in sorted(glob.glob(os.path.join(sys.argv[1],"*.json")), key=lambda p:int(''.join(c for c in os.path.basename(p) if c.isdigit()))):
+                  d=json.load(open(f))
+                  g=lambda k: d.get(k)
+                  rows.append((d.get("max_concurrency"), g("request_throughput"), g("output_throughput"),
+                               g("p50_ttft_ms"), g("p95_ttft_ms"), g("p50_itl_ms"), g("p95_itl_ms"),
+                               g("p50_e2el_ms"), g("p95_e2el_ms")))
+              hdr=["conc","req/s","out_tok/s","ttft_p50","ttft_p95","itl_p50","itl_p95","e2e_p50","e2e_p95"]
+              print("| "+" | ".join(hdr)+" |")
+              print("|"+"---|"*len(hdr))
+              for r in rows:
+                  print("| "+" | ".join(("" if v is None else (f"{v:.1f}" if isinstance(v,float) else str(v))) for v in r)+" |")
+              PY
+              echo "RESULTS_TABLE_END"
+      volumes:
+        - name: tmp
+          emptyDir: {}

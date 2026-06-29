@@ -1,0 +1,42 @@
+# LiteLLM proxy — the tenant edge (virtual keys / budgets / spend), layered above the GIE gateway
+# (ADR-0013). Chart 1.89.2. Wave 4: after litellm-bootstrap (DB Cluster + ESO secrets, wave 3).
+# The chart's migration Job runs as an Argo PreSync hook. OCI Helm chart + git values ref.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  sources:
+    - repoURL: ghcr.io/berriai
+      chart: litellm-helm
+      targetRevision: 1.89.2
+      helm:
+        releaseName: litellm
+        valueFiles:
+          - $values/platform/litellm/values.yaml
+          - $values/clusters/ai-dev/litellm-profile.generated.yaml
+          - $values/clusters/ai-dev/litellm-guardrails.generated.yaml # ADR-0034: guardrails block (no-op when feature off)
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: litellm
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,18 @@
+# Governed MCP backend (ADR-0033). agentgateway is MCP-native: this AgentgatewayBackend selects
+# MCP target Services by label and federates/multiplexes them behind one MCP endpoint. Adding a second
+# safe server (fetch, filesystem) = another entry under targets — the clients still see one endpoint.
+# This is the parallel protocol plane: it is NOT an `ai:` provider (that is the LiteLLM /v1 egress path,
+# ADR-0013) — MCP ≠ OpenAI /v1, so LiteLLM is deliberately not in this path.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp
+  namespace: mcp-gateway
+spec:
+  mcp:
+    targets:
+      - name: mcp-server-everything
+        selector:
+          services:
+            matchLabels:
+              app: mcp-server-everything

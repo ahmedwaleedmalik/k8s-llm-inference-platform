@@ -1,0 +1,23 @@
+# Request priority within the pool. Under contention the EPP admits higher-priority requests
+# first — interactive (chat) preempts batch. Higher spec.priority = served first.
+# InferenceObjective is still alpha (inference.networking.x-k8s.io/v1alpha2) while InferencePool
+# is GA (inference.networking.k8s.io/v1) — verify the served schema, don't trust old examples.
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: interactive
+spec:
+  priority: 10
+  poolRef:
+    group: inference.networking.k8s.io
+    name: vllm-sim
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: batch
+spec:
+  priority: 1
+  poolRef:
+    group: inference.networking.k8s.io
+    name: vllm-sim

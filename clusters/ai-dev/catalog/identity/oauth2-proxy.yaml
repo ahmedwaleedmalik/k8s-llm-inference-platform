@@ -1,0 +1,37 @@
+# oauth2-proxy (ADR-0026) — the gateway forward-auth bridge to Dex. Auto-sync; feature-gated via
+# resolve-groups (only present when domain + dns/identity are enabled) so it stays opt-in without a
+# manual sync step. Multi-source: the chart + git values + the ESO secret / route / extAuth policy.
+# Wave 5 (after Dex + the edge gateway).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: oauth2-proxy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://oauth2-proxy.github.io/manifests
+      chart: oauth2-proxy
+      targetRevision: 10.7.0
+      helm:
+        valueFiles:
+          - $values/platform/oauth2-proxy/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      path: platform/oauth2-proxy/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: oauth2-proxy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,28 @@
+# DCGM GPU metrics → Prometheus. The scrape target is rendered from config.yaml gpu_stack by
+# scripts/resolve-gpu.sh: gke-managed → a PodMonitor on GKE's managed dcgm-exporter; operator → empty
+# (the GPU Operator ships its own dcgm-exporter ServiceMonitor); none → empty. See
+# platform/dcgm-metrics/README.md, ADR-0001.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dcgm-metrics
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3" # after kube-prometheus-stack (wave 2) installs the PodMonitor CRD
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/dcgm-metrics
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

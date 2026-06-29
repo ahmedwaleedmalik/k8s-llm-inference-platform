@@ -1,0 +1,17 @@
+# model-b stable InferencePool + EPP. Selects only the stable-version sim pods, so this pool is
+# one side of the 90/10 canary split in the HTTPRoute. Same chart/values shape as the model-a
+# pool; only the pod selector differs. See inferencepool/values.yaml for the field rationale.
+provider:
+  name: none
+inferencePool:
+  modelServers:
+    matchLabels:
+      app: vllm-sim-b
+      version: stable
+inferenceExtension:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

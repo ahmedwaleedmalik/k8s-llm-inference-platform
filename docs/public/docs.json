@@ -1,0 +1,186 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Kubernetes LLM Platform",
+  "colors": {
+    "primary": "#326CE5",
+    "light": "#315F56",
+    "dark": "#9DBBFF"
+  },
+  "logo": {
+    "light": "/assets/brand/kubernetes-inference-light.svg",
+    "dark": "/assets/brand/kubernetes-inference-dark.svg",
+    "href": "/"
+  },
+  "favicon": "/assets/brand/kubernetes-inference-mark.svg",
+  "appearance": {
+    "default": "light"
+  },
+  "fonts": {
+    "heading": {
+      "family": "IBM Plex Sans",
+      "weight": 600
+    },
+    "body": {
+      "family": "IBM Plex Sans",
+      "weight": 400
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "background": {
+    "color": {
+      "light": "#FAFBF7",
+      "dark": "#101417"
+    }
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "latex": false,
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "github-dark"
+      }
+    }
+  },
+  "seo": {
+    "metatags": {
+      "canonical": "https://ai.wmx.dev"
+    }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Platform",
+        "icon": "layout-dashboard",
+        "pages": [
+          "index",
+          "benchmarks"
+        ]
+      },
+      {
+        "group": "Get started",
+        "icon": "rocket",
+        "pages": [
+          "getting-started/index",
+          "getting-started/configure",
+          "getting-started/provision-infra",
+          "getting-started/install-platform"
+        ]
+      },
+      {
+        "group": "Architecture",
+        "icon": "layers",
+        "pages": [
+          "architecture/index",
+          "architecture/serving-layers",
+          {
+            "group": "Concepts",
+            "pages": [
+              "architecture/lessons/index",
+              "architecture/lessons/gpu-signals-and-autoscaling",
+              "architecture/lessons/cold-start",
+              "architecture/lessons/portability",
+              "architecture/lessons/operational-gotchas"
+            ]
+          }
+        ]
+      },
+      {
+        "group": "Guides",
+        "icon": "terminal",
+        "pages": [
+          "guides/index",
+          {
+            "group": "GPU & scheduling",
+            "icon": "activity",
+            "pages": [
+              "guides/gpu-debugging",
+              "guides/pending-gpu-workloads",
+              "guides/keda-autoscaling"
+            ]
+          },
+          {
+            "group": "Serving",
+            "icon": "cpu",
+            "pages": [
+              "guides/vllm-serving",
+              "guides/kserve",
+              "guides/kserve-modelcar",
+              "guides/change-or-add-a-model",
+              "guides/switch-serving-layer"
+            ]
+          },
+          {
+            "group": "Routing & gateway",
+            "icon": "waypoints",
+            "pages": [
+              "guides/inference-gateway",
+              "guides/litellm",
+              "guides/litellm-spend-dashboard",
+              "guides/guardrails"
+            ]
+          },
+          {
+            "group": "Experience apps",
+            "icon": "app-window",
+            "pages": [
+              "guides/key-portal",
+              "guides/n8n",
+              "guides/coder-stack"
+            ]
+          },
+          {
+            "group": "Platform & ops",
+            "icon": "shield-check",
+            "pages": [
+              "guides/secret-contract",
+              "guides/sso-dex",
+              "guides/security-enforcement",
+              "guides/staged-bring-up",
+              "guides/prod-ha-validation",
+              "guides/teardown"
+            ]
+          },
+          {
+            "group": "Benchmarking",
+            "icon": "chart-line",
+            "pages": [
+              "guides/benchmarking"
+            ]
+          }
+        ]
+      },
+      {
+        "group": "Reference",
+        "icon": "book-open",
+        "pages": [
+          "reference/index",
+          "reference/glossary",
+          "reference/repo-layout",
+          "reference/model-catalog",
+          "reference/secrets",
+          "reference/security",
+          "reference/trust-model",
+          "reference/agentgateway",
+          "reference/make-targets",
+          "reference/roadmap"
+        ]
+      },
+      {
+        "group": "Design rationale",
+        "icon": "scale",
+        "pages": [
+          "decisions/index"
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform"
+    }
+  }
+}

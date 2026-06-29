@@ -1,0 +1,38 @@
+# KServe well-known LLMInferenceServiceConfig presets (config-llm-scheduler/router/decode/prefill templates).
+# NOT shipped by any KServe chart (verified v0.19.0). serving/llm-d references `kserve-config-llm-scheduler`
+# via router.scheduler{} — without these the LLMInferenceService stays PresetsCombined=False/ConfigNotFound.
+# Sourced directly from the KServe repo at the pinned tag (kustomize). Proven live.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kserve-llmisvc-presets
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kserve/kserve
+    targetRevision: v0.19.0
+    path: config/llmisvcconfig
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kserve
+  ignoreDifferences:
+    - group: serving.kserve.io
+      kind: LLMInferenceServiceConfig
+      name: kserve-config-llm-router-route
+      namespace: kserve
+      jsonPointers:
+        - /spec/router/route/http/spec/rules/6/backendRefs/0/group
+        - /spec/router/route/http/spec/rules/7/backendRefs/0/group
+        - /spec/router/route/http/spec/rules/7/matches/0/path
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

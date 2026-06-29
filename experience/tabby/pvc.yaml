@@ -1,0 +1,13 @@
+# Tabby data dir (TABBY_ROOT) — the code index + SQLite live here. RWO, single replica.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tabby-data
+  namespace: experience
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 10Gi

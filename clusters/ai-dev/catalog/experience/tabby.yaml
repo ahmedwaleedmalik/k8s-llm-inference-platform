@@ -1,0 +1,27 @@
+# Tabby — experience-tier FIM server. Auto-sync: the litellm-keys Job (wave 4) mints tabby-secrets
+# (a LiteLLM virtual key), and an initContainer substitutes it into config.toml — so no manual key step.
+# Wave 5 (after litellm-keys).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tabby
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: experience/tabby
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: experience
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,32 @@
+# ArgoCD OIDC client secret (ADR-0026 / runbook sso-dex.md). Syncs the Dex client secret into a
+# dedicated ESO-owned secret `argocd-dex-oidc` (labelled app.kubernetes.io/part-of: argocd) that
+# argocd-server resolves via `$argocd-dex-oidc:clientSecret` — NOT merged into the chart-owned
+# argocd-secret (self-sync prunes that key → invalid_client). Lives here
+# (not in the wave -2 argo-cd self-management app) so it syncs at wave 5 — after external-secrets and
+# Dex are up. Auto-sync; feature-gated via resolve-groups (only present when domain + dns/identity are
+# enabled) so it stays opt-in without a manual sync step.
+# NOTE: filename avoids the `*-secret.yaml` .gitignore rule that silently dropped the prior version.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-oidc-secret
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: bootstrap/argo-cd/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

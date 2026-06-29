@@ -1,0 +1,8 @@
+# No top-level `namespace:` — resources carry explicit namespaces (the RBAC read-Role lives in litellm,
+# everything else in experience), so a blanket namespace transformer must not override them.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rbac.yaml
+  - mint-script.configmap.yaml
+  - job.yaml

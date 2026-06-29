@@ -1,0 +1,65 @@
+# Governed access: JWT/OIDC auth on the MCP route (ADR-0033). Governance is the point — the MCP
+# server is an example, this policy is the platform substrate. agentgateway validates a bearer JWT
+# minted by Dex (the platform's single OIDC issuer, ADR-0026) before any tool call reaches the server.
+# Strict mode = reject on any invalid/missing claim. JWKS is fetched from Dex IN-CLUSTER (svc dex:5556,
+# /keys) so validation does not depend on the public edge being up.
+#
+# The `mcp:` block advertises OAuth resource-server metadata so an MCP client can discover where to get
+# a token (the .well-known paths the HTTPRoute also matches). This is MCP's own auth handshake — it is
+# NOT LiteLLM's virtual-key plane; the two governance planes are parallel and independent.
+#
+# LIVE-VALIDATE: like the portal-forward-auth policy (oauth2-proxy), the exact field shape for
+# jwtAuthentication.providers + the cross-namespace JWKS backendRef needs confirming against
+# agentgateway v1.2.1 when the stack is up — this is hand-authored from the v1.2.x MCP-auth docs.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: mcp-authn
+  namespace: mcp-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: "https://auth.ai-platform.wmx.dev"
+          audiences:
+            - "https://auth.ai-platform.wmx.dev/mcp"
+          jwks:
+            remote:
+              backendRef:
+                group: ""
+                kind: Service
+                name: dex
+                namespace: dex
+                port: 5556
+              jwksPath: "/keys"
+      # mcp is nested UNDER jwtAuthentication (traffic.jwtAuthentication.mcp), not a sibling of it —
+      # agentgateway v1.2.1 CRD shape. `provider` enum is Auth0|Keycloak only (Dex is not listed) and
+      # is optional, so it is omitted; resourceMetadata drives the OAuth discovery metadata endpoints.
+      mcp:
+        resourceMetadata:
+          resource: "https://auth.ai-platform.wmx.dev/mcp"
+          scopesSupported:
+            - email
+          bearerMethodsSupported:
+            - header
+---
+# Lets the mcp-gateway-ns auth policy reach the Dex Service across namespaces for JWKS (mirrors the
+# experience-to-oauth2-proxy ReferenceGrant pattern).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: mcp-gateway-to-dex
+  namespace: dex
+spec:
+  from:
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+      namespace: mcp-gateway
+  to:
+    - group: ""
+      kind: Service

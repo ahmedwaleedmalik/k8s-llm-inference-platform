@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Kubernetes LLM Platform">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#1D4ED8"/>
+  <path d="M20 24h24M20 32h18M20 40h24" stroke="#F8FAFC" stroke-width="5" stroke-linecap="round"/>
+  <path d="M40 32h5.5c3 0 5.5 2.5 5.5 5.5V40" stroke="#A7F3D0" stroke-width="5" stroke-linecap="round"/>
+  <path d="M53 14 59 8" stroke="#15201C" stroke-width="4" stroke-linecap="round"/>
+</svg>

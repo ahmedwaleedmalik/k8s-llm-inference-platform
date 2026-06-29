@@ -1,0 +1,48 @@
+# GPU smoke test — verifies the GPU stack end-to-end. Run manually (not GitOps-synced).
+# Requesting nvidia.com/gpu triggers the autoscaler -> a GPU node comes up -> GKE installs the
+# driver + device plugin -> this Job runs nvidia-smi. The node scales back to 0 after.
+#   kubectl apply -f workloads/gpu-smoke/job.yaml
+#   kubectl logs -f job/gpu-smoke
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke
+  namespace: default
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=batch Job runs nvidia-smi to completion; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=batch Job runs nvidia-smi to completion; no service endpoint to readiness-probe
+    checkov.io/skip3: CKV_K8S_21=manual cluster smoke shipped before tenant namespaces exist
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: nvidia-smi
+          image: nvidia/cuda:12.4.0-base-ubuntu22.04@sha256:80d4d9ac041242f6ae5d05f9be262b3374e0e0b8bb5a49c6c3e94e192cde4a44
+          imagePullPolicy: Always
+          command: ["nvidia-smi"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+              nvidia.com/gpu: 1

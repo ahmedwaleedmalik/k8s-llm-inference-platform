@@ -1,0 +1,19 @@
+# Scrape vLLM's /metrics into the in-cluster Prometheus (same foundation as DCGM).
+# vLLM V1 renamed several series (gpu_cache_usage_perc -> kv_cache_usage_perc,
+# time_per_output_token_seconds -> inter_token_latency_seconds) — dump live /metrics
+# before wiring dashboards against them. The scrape itself is rename-agnostic.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: raw-vllm
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: raw-vllm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: raw-vllm
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

@@ -1,0 +1,14 @@
+# Open WebUI data (SQLite, chats, uploads). RWO, single replica. A real multi-user deploy moves this to
+# the platform Postgres (CNPG) + object storage — out of scope for the lab demo.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: experience
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 5Gi

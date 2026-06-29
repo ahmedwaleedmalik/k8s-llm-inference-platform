@@ -1,0 +1,97 @@
+# Dex — the platform's single OIDC issuer (ADR-0026). Lightweight broker at auth.<domain>.
+# DEFAULT = a static admin user (password minted by `make seed-secrets`) so a fresh clone has WORKING
+# auth with ZERO external setup. Add Google/your IdP later by uncommenting the connector block — Dex
+# makes it a one-block, config-as-code swap (see docs/public/guides/sso-dex.md). Serves HTTP :5556 behind
+# the agentgateway auth.<domain> TLS listener. The domain placeholder → fork-init.
+config:
+  issuer: https://auth.ai-platform.wmx.dev
+  # kubernetes storage persists OIDC auth-request state and refresh tokens as CRDs in the dex namespace,
+  # so sessions and in-flight logins survive a Dex restart. memory storage dropped them on restart,
+  # which surfaced as an "invalid state parameter" Bad Request mid-login. The chart default RBAC
+  # (rbac.create: true) lets Dex create and manage its own CRDs. HA upgrade for multi-replica Dex:
+  # postgres (reuse CloudNativePG).
+  storage:
+    type: kubernetes
+    config:
+      inCluster: true
+  web:
+    http: 0.0.0.0:5556
+  oauth2:
+    skipApprovalScreen: true
+
+  # DEFAULT login: static admin user. The bcrypt hash is NEVER committed; it flows GSM -> ESO -> env
+  # exactly like the OIDC client secrets below. `make seed-secrets` mints a random password, stores the
+  # retrievable operator copy as `dex-admin-password`, bcrypts it into `dex-admin-hash`, and mirrors the
+  # plaintext to secrets/dex-admin-password (gitignored). The dex-secrets ExternalSecret materializes
+  # only the hash into env DEX_ADMIN_PASSWORD_HASH, which hashFromEnv reads at startup. If an older fork
+  # has only the one-way hash and no password copy, run `make reset-dex-admin`.
+  enablePasswordDB: true
+  staticPasswords:
+    - email: admin@ai-platform.wmx.dev
+      hashFromEnv: DEX_ADMIN_PASSWORD_HASH
+      username: admin
+      userID: static-admin
+
+  # ── OPT-IN: federate to an upstream IdP (Google shown; swap for github/oidc/ldap/saml). Uncomment,
+  #    add dex-secrets (ESO: dex-google-client-id / -secret), and add the matching envVars block below.
+  #    A fork can keep BOTH the static user and a connector, or drop the static user once SSO works.
+  # connectors:
+  #   - type: google
+  #     id: google
+  #     name: Google
+  #     config:
+  #       clientID: $GOOGLE_CLIENT_ID
+  #       clientSecret: $GOOGLE_CLIENT_SECRET
+  #       redirectURI: https://auth.ai-platform.wmx.dev/callback
+  #
+  # App OIDC clients. oauth2-proxy (the gateway forward-auth) is ACTIVE — it's how the key-portal is
+  # protected. ArgoCD/Grafana/Open WebUI stay commented until you create their dex-<app>-client-secret
+  # and uncomment their app-side OIDC (runbook sso-dex.md); until then they use their own login.
+  staticClients:
+    - id: oauth2-proxy
+      name: Gateway forward-auth
+      secretEnv: OAUTH2_PROXY_CLIENT_SECRET
+      redirectURIs: [ https://portal.ai-platform.wmx.dev/oauth2/callback ]
+    - id: argocd
+      name: ArgoCD
+      secretEnv: ARGOCD_CLIENT_SECRET
+      redirectURIs: [ https://argocd.ai-platform.wmx.dev/auth/callback ]
+    - id: litellm
+      name: LiteLLM
+      secretEnv: LITELLM_CLIENT_SECRET
+      redirectURIs: [ https://llm.ai-platform.wmx.dev/sso/callback ]
+    - id: grafana
+      name: Grafana
+      secretEnv: GRAFANA_CLIENT_SECRET
+      redirectURIs: [ https://grafana.ai-platform.wmx.dev/login/generic_oauth ]
+    - id: open-webui
+      name: Open WebUI
+      secretEnv: OPENWEBUI_CLIENT_SECRET
+      redirectURIs: [ https://chat.ai-platform.wmx.dev/oauth/oidc/callback ]
+    - id: tabby
+      name: Tabby
+      secretEnv: TABBY_CLIENT_SECRET
+      redirectURIs: [ https://tabby.ai-platform.wmx.dev/oauth/callback/oidc ]
+
+# Inject the admin password hash + the oauth2-proxy client secret from the dex-secrets ESO (manifests/).
+# Add GOOGLE_* / per-app entries here as you enable those.
+envVars:
+  - name: DEX_ADMIN_PASSWORD_HASH
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: DEX_ADMIN_PASSWORD_HASH } }
+  - name: OAUTH2_PROXY_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: OAUTH2_PROXY_CLIENT_SECRET } }
+  - name: ARGOCD_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: ARGOCD_CLIENT_SECRET } }
+  - name: LITELLM_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: LITELLM_CLIENT_SECRET } }
+  - name: GRAFANA_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: GRAFANA_CLIENT_SECRET } }
+  - name: OPENWEBUI_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: OPENWEBUI_CLIENT_SECRET } }
+  - name: TABBY_CLIENT_SECRET
+    valueFrom: { secretKeyRef: { name: dex-secrets, key: TABBY_CLIENT_SECRET } }
+
+service:
+  ports:
+    http:
+      port: 5556

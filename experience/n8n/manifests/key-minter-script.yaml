@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n-key-minter-script
+  namespace: n8n
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  mint.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    LITELLM="http://litellm.litellm.svc.cluster.local:4000"
+    N8N_NS=n8n
+    LITELLM_NS=litellm
+
+    log() { echo "n8n-key-minter: $*" >&2; }
+
+    for _ in $(seq 1 60); do
+      curl -fsS -m 3 "$LITELLM/health/liveliness" >/dev/null 2>&1 && break
+      log "waiting for litellm proxy..."; sleep 5
+    done
+    curl -fsS -m 3 "$LITELLM/health/liveliness" >/dev/null 2>&1 || { log "litellm proxy not reachable"; exit 1; }
+
+    master_key="$(kubectl -n "$LITELLM_NS" get secret litellm-secrets -o jsonpath='{.data.PROXY_MASTER_KEY}' | base64 -d)"
+    [ -n "$master_key" ] || { log "no LiteLLM master key"; exit 1; }
+
+    valid_key() { curl -fsS -m 5 "$LITELLM/v1/models" -H "Authorization: Bearer $1" >/dev/null 2>&1; }
+    current_key() { kubectl -n "$N8N_NS" get secret n8n-litellm-secrets -o jsonpath='{.data.LITELLM_VKEY}' 2>/dev/null | base64 -d 2>/dev/null || true; }
+    mint() {
+      curl -fsS "$LITELLM/key/generate" \
+        -H "Authorization: Bearer $master_key" -H 'Content-Type: application/json' \
+        -d "{\"key_alias\":\"n8n-$(date +%s)\",\"metadata\":{\"app\":\"n8n\",\"managed-by\":\"n8n-key-minter\"}}" \
+        | jq -r '.key'
+    }
+
+    key="$(current_key)"
+    if [ -n "$key" ] && valid_key "$key"; then
+      log "existing n8n key still valid, keeping"
+    else
+      log "minting a new n8n key"
+      key="$(mint)"
+      [ -n "$key" ] && [ "$key" != null ] || { log "mint failed"; exit 1; }
+    fi
+
+    kubectl -n "$N8N_NS" create secret generic n8n-litellm-secrets \
+      --from-literal=LITELLM_VKEY="$key" \
+      --dry-run=client -o yaml | kubectl apply -f - >&2
+    log "done"

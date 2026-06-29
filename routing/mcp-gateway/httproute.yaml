@@ -1,0 +1,46 @@
+# MCP route. Attaches cross-namespace to the SAME shared `inference-gateway` front door as the local
+# vLLM + external-egress paths (mirrors egress/httproute-anthropic.yaml: route+backend co-located in
+# this namespace, only the route->gateway attachment is cross-ns). So `agent client -> agentgateway
+# MCP -> MCP server` rides the one governed data plane, no second gateway.
+#
+# Path plane is separate from the OpenAI /v1 plane: MCP clients hit /mcp; the OAuth discovery paths
+# (.well-known + JWKS proxy) are matched so MCP clients can discover the resource server and validate
+# tokens through the gateway (agentgateway MCP auth tutorial).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp
+  namespace: mcp-gateway
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+      namespace: inference
+  rules:
+    - filters:
+        # CORS for browser-based MCP clients (the agentic IDEs use a native client, but the discovery
+        # probes are browser-style; allow the MCP session header through).
+        - type: CORS
+          cors:
+            allowCredentials: true
+            allowHeaders: ["Origin", "Authorization", "Content-Type", "Mcp-Session-Id"]
+            allowMethods: ["*"]
+            allowOrigins: ["*"]
+            exposeHeaders: ["Mcp-Session-Id"]
+            maxAge: 86400
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: mcp
+      matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+        # OAuth protected-resource + authorization-server metadata for MCP client discovery.
+        - path:
+            type: PathPrefix
+            value: /.well-known/oauth-protected-resource/mcp
+        - path:
+            type: PathPrefix
+            value: /.well-known/oauth-authorization-server/mcp

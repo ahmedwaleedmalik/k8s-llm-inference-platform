@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# The auth.<domain> HTTPRoute (carries its own namespace). Applied as a git-path source by the dex
+# Argo app, alongside the Helm chart. The default (static-user) Dex needs no secrets; per-app OIDC
+# client secrets (ESO) are added here as SSO is wired.
+resources:
+  - externalsecret.yaml
+  - httproute.yaml

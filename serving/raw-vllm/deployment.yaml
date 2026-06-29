@@ -1,0 +1,170 @@
+# Raw vLLM — OpenAI-compatible server for a small model on the L4.
+# Pinned image (vLLM V1 engine). API key is read from env VLLM_API_KEY (ESO-backed
+# Secret); vLLM enforces it on every /v1/* request. Requesting nvidia.com/gpu triggers
+# the autoscaler -> a GKE-managed L4 node comes up; the node scales back to 0 when the
+# Deployment is scaled to 0 (make vllm-down).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raw-vllm
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: raw-vllm
+  annotations:
+    checkov.io/skip1: CKV_K8S_35=vLLM reads its API key only from the VLLM_API_KEY env var; file-mounted secrets are not supported by the server
+spec:
+  # Default 0 → no GPU node, $0 idle (never leave a GPU running). Bring it
+  # up for a session with `make vllm-up`, down with `make vllm-down`. Argo ignores
+  # /spec/replicas (see clusters/.../raw-vllm.yaml) so selfHeal won't revert the scale.
+  replicas: 0
+  # Recreate (not RollingUpdate): only 1 GPU is available (GPUS_ALL_REGIONS=1), so a
+  # rolling update's surge pod could never get a second GPU and the roll would deadlock.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: raw-vllm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: raw-vllm
+    spec:
+      # GPU-type-agnostic: tolerate the GPU taint + request nvidia.com/gpu, but pin no
+      # accelerator. L4 is frequently stocked out in us-central1-a (GCE out of resources),
+      # so the scheduler/autoscaler falls back to whichever GPU pool has capacity
+      # (gpu-l4 or gpu-t4). 0.5B fits both (L4 23GB / T4 16GB).
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      # Pre-stage weights so the serving container can run HF-offline (below) and never makes the
+      # startup HF metadata call that 429s even on a warm PVC (vllm#24541, ADR-0016). Offline-
+      # first: a warm cache contacts HF zero times; an empty PVC falls back to a one-time online pull,
+      # so a fresh fork still boots.
+      initContainers:
+        - name: prestage-weights
+          image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+          imagePullPolicy: Always
+          command:
+            - python3
+            - -c
+            - |
+              from huggingface_hub import snapshot_download as d
+              m = "Qwen/Qwen2.5-0.5B-Instruct"
+              try:
+                  d(m, local_files_only=True)
+              except Exception:
+                  d(m)
+          env:
+            - name: HF_HOME
+              value: /models
+            # readOnlyRootFilesystem: redirect HOME off the read-only image rootfs onto the
+            # writable /tmp emptyDir (HF writes lock/metadata files under HOME); weights go to /models.
+            - name: HOME
+              value: /tmp
+            - name: USER
+              value: vllm
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+          imagePullPolicy: Always
+          args:
+            - --model=Qwen/Qwen2.5-0.5B-Instruct
+            - --served-model-name=qwen2.5-0.5b-instruct
+            - --gpu-memory-utilization=0.6
+            - --max-model-len=8192
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-key
+                  key: api-key
+            - name: HF_HOME
+              value: /models
+            # Weights are pre-staged by the initContainer, so serve fully offline — the fix for the
+            # startup HF metadata 429 that hits even a warm cache (vllm#24541, ADR-0016).
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            # readOnlyRootFilesystem: vLLM/triton/torch write compile + runtime caches under HOME;
+            # redirect them onto the writable /tmp emptyDir (weights stay on the /models PVC).
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp/.cache
+            - name: TRITON_CACHE_DIR
+              value: /tmp/.triton
+            - name: USER
+              value: vllm
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              memory: 12Gi
+              nvidia.com/gpu: 1
+          # Model download + CUDA-graph capture make first boot slow; gate traffic on
+          # /health and give startup a wide budget (failureThreshold*period = 10 min)
+          # so a cold start isn't killed as a liveness failure.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: vllm-model-cache
+        - name: tmp
+          emptyDir: {}

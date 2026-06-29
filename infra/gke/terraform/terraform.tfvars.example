@@ -1,0 +1,18 @@
+project_id = "ai-lab"
+
+cluster_name = "ai-dev"
+region       = "us-central1"
+location     = "us-central1-a"
+
+platform_machine_type = "e2-standard-4"
+platform_min_node_count = 1
+platform_max_node_count = 3
+
+gpu_node_pool_name   = "gpu-l4"
+gpu_machine_type     = "g2-standard-4"
+gpu_accelerator_type = "nvidia-l4"
+gpu_min_node_count   = 0
+gpu_max_node_count   = 1
+gpu_disk_size_gb     = 100
+
+modelcar_repository_id = "models"

@@ -1,0 +1,16 @@
+# Real InferencePool/EPP for raw-vLLM (B2). Same chart as the sim pool (v1.5.0), but the EPP
+# selects the real GPU backend in the `serving` namespace and load-balances across its replicas
+# (1 today; scales with raw-vllm). provider.name=none → agentgateway discovers the pool.
+provider:
+  name: none
+inferencePool:
+  modelServers:
+    matchLabels:
+      app.kubernetes.io/name: raw-vllm
+inferenceExtension:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

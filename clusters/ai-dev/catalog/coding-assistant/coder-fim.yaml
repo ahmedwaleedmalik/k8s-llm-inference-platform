@@ -1,0 +1,31 @@
+# Coder FIM (Qwen2.5-Coder-1.5B base) — GPU serving, manual-sync (cost footgun). Wave 4.
+# Clients call /v1/completions with Qwen FIM tokens. ignoreDifferences keeps replica scaling from OutOfSync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coder-fim
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/coder-fim
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: coder-fim
+      namespace: serving
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true

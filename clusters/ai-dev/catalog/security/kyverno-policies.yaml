@@ -1,0 +1,27 @@
+# SR2 (ADR-0029) — the ClusterPolicy that rejects unlabeled GPU pods. Wave 3: after the Kyverno
+# controller + CRDs (wave 2) and its webhook are up. SkipDryRunOnMissingResource lets the FIRST sync
+# succeed even though ArgoCD would otherwise dry-run the ClusterPolicy before the kyverno.io CRD is
+# Established; selfHeal is the backstop (same pattern as kueue-config).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/security/kyverno-policies
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true

@@ -1,0 +1,19 @@
+# Ingress Gateway KServe routes through. Standard-mode KServe needs a network controller; we
+# reuse the existing agentgateway provider (gatewayClassName=agentgateway) instead of installing
+# Istio. The controller is told to use this Gateway via kserve.controller.gateway.ingressGateway
+# .kserveGateway=kserve/kserve-ingress-gateway (platform/kserve/values.yaml); KServe then creates
+# one HTTPRoute per InferenceService against it. Same ns as the ISVCs → no ReferenceGrant.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kserve-ingress-gateway
+  namespace: kserve
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All

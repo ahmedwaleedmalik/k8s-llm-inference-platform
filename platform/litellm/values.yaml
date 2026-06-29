@@ -1,0 +1,171 @@
+# LiteLLM proxy (chart 1.89.2) — the tenant edge: virtual keys, per-key $budgets, TPM/RPM, spend,
+# OpenAI /v1 facade. Single replica, no Redis (§7: Redis only when multi-replica). Postgres =
+# CloudNativePG (litellm-pg-rw); all secrets via ESO.
+replicaCount: 1
+
+# Use OUR ESO-synced master key (stable), not a chart-generated random one — otherwise the chart
+# mints a new `litellm-masterkey` Secret on every render and breaks every issued virtual key.
+masterkeySecretName: litellm-secrets
+masterkeySecretKey: PROXY_MASTER_KEY
+
+# Proxy config rendered to the LiteLLM config.yaml by the chart. os.environ/<VAR> indirection is
+# resolved by LiteLLM from the env vars `environmentSecrets` injects.
+proxy_config:
+  model_list:
+    - model_name: qwen-local                          # tenant-facing alias
+      litellm_params:
+        model: openai/qwen2.5-0.5b-instruct           # served-model-name; gateway BBR routes on it
+        api_base: http://inference-gateway.inference.svc.cluster.local/v1
+        api_key: os.environ/UPSTREAM_API_KEY          # the vllm-api-key, presented upstream
+        # Per-token cost — REQUIRED for $budget/spend enforcement: a self-hosted model has no
+        # default price, so without these every call costs $0 and budgets never bind. Set to your
+        # GPU amortization; values here are illustrative (~a small hosted model).
+        input_cost_per_token: 0.0000005
+        output_cost_per_token: 0.0000015
+    # Coder models — routed DIRECT to the per-model Services (single replica; add GIE
+    # InferencePools when they go multi-replica). Same UPSTREAM_API_KEY (shared serving key).
+    - model_name: coder-chat                          # IDE chat — Qwen2.5-Coder-7B-Instruct (AWQ)
+      litellm_params:
+        model: openai/qwen2.5-coder-7b-instruct
+        api_base: http://coder-chat.serving.svc.cluster.local:8000/v1
+        api_key: os.environ/UPSTREAM_API_KEY
+        input_cost_per_token: 0.0000005
+        output_cost_per_token: 0.0000015
+    - model_name: coder-fim                           # IDE autocomplete — clients call /v1/completions
+      litellm_params:                                 # with Qwen FIM tokens (Qwen2.5-Coder-1.5B base)
+        model: openai/qwen2.5-coder-1.5b
+        api_base: http://coder-fim.serving.svc.cluster.local:8000/v1
+        api_key: os.environ/UPSTREAM_API_KEY
+        input_cost_per_token: 0.0000002
+        output_cost_per_token: 0.0000004
+    - model_name: coder-agent                         # agentic IDE/CLI — Qwen2.5-Coder-14B-Instruct (AWQ),
+      litellm_params:                                 # served with --enable-auto-tool-choice (tool calls)
+        model: openai/qwen2.5-coder-14b-instruct
+        api_base: http://coder-agent.serving.svc.cluster.local:8000/v1
+        api_key: os.environ/UPSTREAM_API_KEY
+        input_cost_per_token: 0.0000005
+        output_cost_per_token: 0.0000015
+    - model_name: embeddings                          # @codebase / RAG — TEI BAAI/bge-base-en-v1.5
+      litellm_params:
+        model: openai/bge-base-en-v1.5
+        api_base: http://embeddings.serving.svc.cluster.local/v1
+        api_key: os.environ/UPSTREAM_API_KEY          # TEI ignores auth; LiteLLM requires a value
+        input_cost_per_token: 0.0000001              # embeddings still consume compute; a price is
+                                                     # REQUIRED for $budget/spend to bind on this model
+                                                     # (the CPU budget-proof path when GPU is stocked out)
+    # External provider via the UNIFIED EGRESS (ADR-0013 Amendment): LiteLLM points at agentgateway —
+    # NOT api.anthropic.com — same inference-gateway upstream as the local models. agentgateway's
+    # AnthropicBackend (routing/.../egress) translates this to Anthropic /v1/messages and normalizes
+    # the reply to OpenAI shape WITH a `usage` object, so LiteLLM still computes spend below. The
+    # provider key lives in agentgateway (ESO anthropic-api-key), not here; UPSTREAM_API_KEY is the
+    # gateway-facing value (the backend supplies its own x-api-key upstream). The `openai/` prefix +
+    # bare model name = the served name the gateway's BBR routes on (claude-haiku-4-5 -> AnthropicBackend).
+    # Fallback (ADR): a provider agentgateway can't normalize stays LiteLLM-direct (model: <prov>/..,
+    # its own provider key) — does not apply to the big-4 + OpenAI-compatible, which go through here.
+    # This alias only ROUTES when the `egress` feature is on (the AnthropicBackend + anthropic-api-key
+    # live in the gated `egress` group); with egress off the alias is inert, like the coder-* aliases
+    # when coding-assistant is off. Keeps a default fork from needing an Anthropic key.
+    - model_name: claude-haiku
+      litellm_params:
+        model: openai/claude-haiku-4-5
+        api_base: http://inference-gateway.inference.svc.cluster.local/v1
+        api_key: os.environ/UPSTREAM_API_KEY
+        # Anthropic list price (claude-haiku-4-5): $1/MTok in, $5/MTok out. usage x this = spend.
+        input_cost_per_token: 0.000001
+        output_cost_per_token: 0.000005
+  general_settings:
+    master_key: os.environ/PROXY_MASTER_KEY
+    database_url: os.environ/DATABASE_URL
+    store_model_in_db: true
+    allow_requests_on_db_unavailable: true            # SPOF mitigation (§7)
+    # Per-user spend attribution: Open WebUI (ENABLE_FORWARD_USER_INFO_HEADERS=true) forwards the SSO
+    # user as X-OpenWebUI-User-* headers; these mappings bucket spend per LiteLLM user_id instead of
+    # the single shared OWUI vkey. user_header_mappings replaced the deprecated user_header_name
+    # (LiteLLM >=1.77; chart 1.89.2 supports it). LIVE-VERIFY during bring-up: 2 distinct
+    # X-OpenWebUI-User-Id values -> 2 LiteLLM_DailyUserSpend rows (known upstream OWUI gotchas:
+    # BerriAI/litellm#14667, #21927). CAVEAT: Tabby (shared token) + n8n (service vkey) carry no
+    # per-end-user identity, and the customer/end_user email field is not a reliable attribution
+    # ledger for shared app keys; that stays roadmap.
+    user_header_mappings:
+      - header_name: X-OpenWebUI-User-Id
+        litellm_user_role: internal_user
+      - header_name: X-OpenWebUI-User-Email
+        litellm_user_role: customer
+
+# Inject PROXY_MASTER_KEY, LITELLM_SALT_KEY, UPSTREAM_API_KEY as env from the ESO-synced secret.
+environmentSecrets:
+  - litellm-secrets
+
+# Tell the running proxy not to self-migrate at boot; the migrationJob owns the schema.
+extraEnvVars:
+  - name: DISABLE_SCHEMA_UPDATE
+    value: "true"
+  # Fail the migration Job loudly if prisma migrate fails, so it can never again exit 0 against an
+  # empty schema (inert on the proxy: DISABLE_SCHEMA_UPDATE=true skips the migrate branch there).
+  - name: ENFORCE_PRISMA_MIGRATION_CHECK
+    value: "true"
+  - name: PROXY_BASE_URL
+    value: https://llm.ai-platform.wmx.dev
+  - name: GENERIC_CLIENT_ID
+    value: litellm
+  - name: GENERIC_AUTHORIZATION_ENDPOINT
+    value: https://auth.ai-platform.wmx.dev/auth
+  - name: GENERIC_TOKEN_ENDPOINT
+    value: https://auth.ai-platform.wmx.dev/token
+  - name: GENERIC_USERINFO_ENDPOINT
+    value: https://auth.ai-platform.wmx.dev/userinfo
+  # LiteLLM keys the generic-SSO user by email, so the proxy-admin match must be that email, not the Dex
+  # userID. With static-admin here the SSO admin never matched and landed as internal_user_viewer
+  # (read only). Must equal the Dex static user's email (admin@<domain>); fork-init rewrites the domain.
+  - name: PROXY_ADMIN_ID
+    value: admin@ai-platform.wmx.dev
+
+# External Postgres (CloudNativePG); chart assembles DATABASE_URL from these + the basic-auth secret.
+db:
+  useExisting: true
+  deployStandalone: false                             # disables the bundled postgres subchart
+  endpoint: litellm-pg-rw
+  database: litellm
+  secret:
+    name: litellm-pg-app
+    usernameKey: username
+    passwordKey: password
+
+# Schema migration runs as its own Job, rendered as an Argo PreSync hook (not at proxy boot).
+migrationJob:
+  enabled: true
+  disableSchemaUpdate: false
+  # ApplicationSets do not health-gate sync-waves across child Applications, so the CNPG health
+  # check cannot order this PreSync hook. Block migrate until Postgres accepts an authenticated
+  # connection to the litellm db + role, instead of racing initdb and exiting 0 on an empty schema.
+  extraInitContainers:
+    - name: wait-for-db
+      image: ghcr.io/cloudnative-pg/postgresql@sha256:0f29b435fb501ee534cd0c555d122a6b8e90de477de8e8381c82c5e10d9a9de4
+      command: ["sh", "-c"]
+      args:
+        - |
+          until psql -h litellm-pg-rw -U "$PGUSER" -d litellm -tAc 'select 1' >/dev/null 2>&1; do
+            echo "waiting for litellm-pg primary + litellm db + role..."; sleep 3
+          done
+          echo "litellm DB ready"
+      env:
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: litellm-pg-app
+              key: username
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: litellm-pg-app
+              key: password
+  hooks:
+    argocd:
+      enabled: true
+    helm:
+      enabled: false
+  ttlSecondsAfterFinished: 120
+  backoffLimit: 4
+
+redis:
+  enabled: false

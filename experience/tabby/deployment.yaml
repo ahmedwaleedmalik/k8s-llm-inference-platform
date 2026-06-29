@@ -1,0 +1,137 @@
+# Tabby — self-hosted FIM/autocomplete server (Apache-2.0 core; exclude the proprietary ee/).
+# Tabby IS the completion server: the IDE speaks Tabby's protocol, and Tabby calls the gateway as a
+# vllm/completion backend → coder-fim (so LiteLLM keys/budgets cover Tabby→vLLM, not IDE→Tabby — the
+# topology note). CPU — the model runs on vLLM (coder-fim), Tabby just orchestrates.
+# VERIFY before deploy: the tabby image tag (latest stable) + the config.toml schema (kinds/fields churn).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tabby
+  namespace: experience
+  annotations:
+    checkov.io/skip1: CKV_K8S_35=Tabby and its render-config init read the LiteLLM vkey only from an env Secret
+    checkov.io/skip2: CKV_K8S_25=the chown init drops ALL and adds only CHOWN to fix volume ownership for the non-root main
+  labels:
+    app.kubernetes.io/name: tabby
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tabby
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabby
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # Tabby 0.31 chmods TABBY_ROOT (/data) to 0700 at startup (crates/tabby/src/main.rs), which the
+      # non-root runtime user can only do if it OWNS the dir. fsGroup grants group access but not
+      # ownership, so a fresh PVC (root-owned) makes Tabby panic with PermissionDenied → CrashLoop.
+      # This init container chowns the PVC to the runtime UID once; the main container stays non-root.
+      initContainers:
+        - name: chown-data
+          image: docker.io/library/busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["sh", "-c", "chown 65532:65532 /data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 32Mi }
+        # Substitute the minted LiteLLM virtual key (from tabby-secrets, written by the litellm-keys
+        # Job) into config.toml's __LITELLM_VKEY__ placeholder, so no key ever lives in git.
+        - name: render-config
+          image: docker.io/library/busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["sh", "-c", 'sed "s|__LITELLM_VKEY__|${LITELLM_VKEY}|g" /raw/config.toml > /rendered/config.toml']
+          env:
+            - name: LITELLM_VKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tabby-secrets
+                  key: LITELLM_VKEY
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: /raw
+            - name: rendered
+              mountPath: /rendered
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 32Mi }
+      containers:
+        - name: tabby
+          image: tabbyml/tabby:0.31.0@sha256:d50d2717331ec0226e25a24342a349c745f8b8fa9f84b0e5195b7a7fb89ecc6d
+          imagePullPolicy: Always
+          args: ["serve", "--device", "cpu", "--port", "8080"]
+          env:
+            - name: TABBY_ROOT
+              value: /data
+            # readOnlyRootFilesystem: anchor HOME on the writable TABBY_ROOT PVC; /tmp is an emptyDir below.
+            - name: HOME
+              value: /data
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: rendered
+              mountPath: /data/config.toml
+              subPath: config.toml
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: "1", memory: 1Gi }
+            limits: { cpu: "2", memory: 2Gi }
+          # tcpSocket, NOT httpGet /v1/health: Tabby 0.31 gates EVERY endpoint (incl. /v1/health)
+          # behind a registration token, so an unauthenticated HTTP probe always 401s and the pod
+          # never goes Ready. Readiness here = "the server is listening". IDE→Tabby auth (the token)
+          # is a first-run web-UI step, out of scope for this thin demo; the platform
+          # proves the keyed leg Tabby→gateway→coder-fim.
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tabby-data
+        - name: config
+          configMap:
+            name: tabby-config
+        - name: rendered
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

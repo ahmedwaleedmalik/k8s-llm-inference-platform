@@ -1,0 +1,16 @@
+# Model cache (HF_HOME). Persists the downloaded weights across pod restarts so a
+# warm node boots without re-pulling from HuggingFace. RWO is sufficient for a single
+# replica; the ReadOnlyMany shared-cache pattern (fast fan-out across many replicas)
+# is a scale concern for multi-replica serving, out of scope for a single replica.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-model-cache
+  namespace: serving
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 20Gi

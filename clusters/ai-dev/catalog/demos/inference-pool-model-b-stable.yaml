@@ -1,0 +1,35 @@
+# model-b stable InferencePool + EPP. Wave 3 (with the other pools). releaseName=model-b-stable
+# names the InferencePool CR the HTTPRoute weighted backendRef references. Same multi-source
+# pattern as inference-pool; only the values file (pod selector) differs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-pool-model-b-stable
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  sources:
+    - repoURL: registry.k8s.io/gateway-api-inference-extension/charts
+      chart: inferencepool
+      targetRevision: v1.5.0
+      helm:
+        releaseName: model-b-stable
+        valueFiles:
+          - $values/routing/gateway-api-inference/inferencepool/values-model-b-stable.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

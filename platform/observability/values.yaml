@@ -1,0 +1,93 @@
+# kube-prometheus-stack (chart 86.2.3, Prometheus Operator v0.91.0).
+# Cluster metrics + dashboards: Prometheus, Grafana, kube-state-metrics, node-exporter.
+# Sized for a small dev cluster; all inference tooling (DCGM, vLLM, GIE) assumes a
+# Prometheus-native scrape target, so this is the foundation everything else plugs into.
+
+crds:
+  enabled: true
+
+# No paging target on a single dev cluster — disable Alertmanager (revisit with
+# per-workload SLOs once serving lands).
+alertmanager:
+  enabled: false
+
+# GKE runs a managed control plane: etcd, scheduler, controller-manager and kube-proxy
+# metrics endpoints are not reachable, so their default ServiceMonitors only produce
+# permanently-down targets. Disable them.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    # Discover ServiceMonitors/PodMonitors/Rules from ALL namespaces, not only those
+    # carrying this release's Helm label — workloads ship their own monitors.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+grafana:
+  defaultDashboardsTimezone: browser
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  # Pick up dashboards from labelled ConfigMaps in any namespace (grafana_dashboard=1),
+  # so future components can ship dashboards as code.
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+    # Auto-import datasources from labelled Secrets/ConfigMaps (grafana_datasource=1) in any
+    # namespace — the LiteLLM spend dashboard ships its Postgres datasource as an ESO Secret.
+    datasources:
+      enabled: true
+      searchNamespace: ALL
+
+  # ── SSO via Dex (ADR-0026 / runbook sso-dex.md). SSO-only: the username/password form is disabled.
+  # Break-glass = kubeconfig: the chart still holds an admin in the observability-grafana Secret; recover
+  # via `kubectl -n monitoring exec deploy/observability-grafana -- grafana cli admin reset-admin-password`
+  # or flip auth.disable_login_form back to false.
+  grafana.ini:
+    server:
+      root_url: https://grafana.ai-platform.wmx.dev
+    auth:
+      disable_login_form: true   # SSO-only: no username/password form, only "Sign in with Dex"
+    auth.basic:
+      enabled: false             # also close the HTTP basic-auth API path
+    auth.generic_oauth:
+      enabled: true
+      name: Dex
+      client_id: grafana
+      client_secret: $__env{GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}
+      scopes: openid profile email
+      auth_url: https://auth.ai-platform.wmx.dev/auth
+      token_url: https://auth.ai-platform.wmx.dev/token
+      api_url: https://auth.ai-platform.wmx.dev/userinfo
+      role_attribute_path: "email == 'admin@ai-platform.wmx.dev' && 'Admin' || 'Viewer'"
+      role_attribute_strict: false
+  envValueFrom:
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+      secretKeyRef: { name: grafana-oidc, key: client-secret }

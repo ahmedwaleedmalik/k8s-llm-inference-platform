@@ -1,0 +1,28 @@
+# Real-model routing: the HTTPRoute + InferenceObjective for raw-vLLM, both in `serving` (same
+# namespace as the InferencePool — agentgateway won't honor a ReferenceGrant for cross-ns
+# InferencePool backendRefs). The route attaches cross-namespace to inference-gateway via that
+# gateway's allowedRoutes. Wave 4: after the inference-pool-raw-vllm pool (wave 3).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-routing-real
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/gateway-api-inference/real
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

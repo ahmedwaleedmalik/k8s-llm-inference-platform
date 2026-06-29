@@ -1,0 +1,26 @@
+# Embeddings (TEI nomic-embed-text) — CPU, always-on, so AUTO-sync (no GPU cost footgun, unlike
+# the raw-vllm/coder manual-sync apps). Wave 4. Registered in LiteLLM model_list (embeddings).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: embeddings
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/embeddings
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

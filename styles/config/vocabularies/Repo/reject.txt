@@ -1,0 +1,18 @@
+# Banned marketing/slop terms — Vale flags these. The fix is almost always a
+# concrete claim (a number, a flag, an observed behaviour), not a synonym.
+seamless(ly)?
+robust
+powerful
+effortless(ly)?
+cutting-edge
+state-of-the-art
+game[ -]?changer
+supercharge[ds]?
+unlock(s|ed)?
+plethora
+leverage[ds]?
+utilize[ds]?
+delve[ds]?
+elevate[ds]?
+streamline[ds]?
+world[ -]class

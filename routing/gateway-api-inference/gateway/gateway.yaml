@@ -1,0 +1,19 @@
+# Front-door Gateway. gatewayClassName=agentgateway: the agentgateway controller provisions the
+# data-plane proxy and reconciles InferencePool backends behind it.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: inference-gateway
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      # Allow HTTPRoutes from other namespaces to attach (e.g. the real serving path in `serving`,
+      # whose route+InferencePool are co-located there). agentgateway does NOT honor a ReferenceGrant
+      # for cross-namespace InferencePool *backendRefs*, so we keep route+pool same-namespace and make
+      # only the route→gateway attachment cross-namespace (standard Gateway API, gated here).
+      allowedRoutes:
+        namespaces:
+          from: All

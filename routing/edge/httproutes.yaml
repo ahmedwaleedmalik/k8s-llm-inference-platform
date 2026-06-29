@@ -1,0 +1,59 @@
+# Edge HTTPRoutes. Routes attach to platform-gateway cross-namespace (the gateway's
+# allowedRoutes.namespaces.from: All permits it); each route is CO-LOCATED with its backend Service so
+# no cross-namespace backendRef / ReferenceGrant is needed. ai-platform.wmx.dev filled by `make fork-init`.
+
+# api.<domain> → LiteLLM tenant API (litellm ns). Route lives here so the backendRef is local.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+  namespace: litellm
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: api-https
+  hostnames:
+    - api.ai-platform.wmx.dev
+  rules:
+    - backendRefs:
+        - name: litellm
+          port: 4000
+---
+# llm.<domain> → LiteLLM admin UI (litellm ns). Same backend as api.<domain>; the chart serves the
+# /ui dashboard and the API on port 4000. Route lives here so the backendRef is local.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm
+  namespace: litellm
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: llm-https
+  hostnames:
+    - llm.ai-platform.wmx.dev
+  rules:
+    - backendRefs:
+        - name: litellm
+          port: 4000
+---
+# :80 → 301 https on every host. The ACME HTTP-01 challenge path (/.well-known/acme-challenge/*) is
+# served by a more-specific temporary route cert-manager adds, so it wins over this catch-all redirect.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: experience
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301

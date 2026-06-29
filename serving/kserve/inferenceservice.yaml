@@ -1,0 +1,88 @@
+# vLLM-backed InferenceService — same Qwen2.5-0.5B / same vLLM v0.23.0 as raw-vllm, but KServe
+# owns the lifecycle: it creates the Deployment/Service + an HTTPRoute on kserve-ingress-gateway
+# and exposes a stable URL, with declarative rollout/canary and scale — the KServe value over
+# raw-vllm (ADR-0006 + docs/raw-vllm-vs-kserve.md).
+#
+# Custom-container predictor (BYO container), NOT model+runtime: KServe's model+runtime binding
+# force-injects `--model=/mnt/models` and so requires a storageUri + storage-initializer; HF
+# 429-rate-limits anonymous pulls and the initializer can't take our HF token cleanly. A custom
+# container runs verbatim, so vLLM self-downloads with HF_TOKEN. Container MUST be named
+# kserve-container. float32 + small max-model-len: CPU has no fp16 fast path; RAM-bound on
+# e2-standard-4. Explicit /health probes (vLLM speaks OpenAI /v1 + /health, not KServe v2).
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen-cpu
+  namespace: kserve
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    # Recreate (not RollingUpdate): a single CPU predictor needs ~2 cores; a surge pod during
+    # rollout would need a second free 2-core slot and deadlock on Insufficient cpu (same single-
+    # slot reasoning as raw-vllm's Recreate for the single GPU). Kill old, then start new.
+    deploymentStrategy:
+      type: Recreate
+    volumes:
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: kserve-model-cache
+    containers:
+      - name: kserve-container
+        image: vllm/vllm-openai-cpu:v0.23.0-x86_64@sha256:6240a6bba604e607300e47490e3477211f968bdf125211bb877d19a70b8fe844
+        args:
+          # Local path on the pre-staged PVC, not the HF repo id: this cluster's GKE egress IP is
+          # persistently HF-429'd (even with a token — it's an IP-level API limit), so serve-time
+          # HF pulls are unreliable. The model is staged to the cache PVC out-of-band (runbook).
+          # This is also the more air-gapped/production-friendly pattern (pre-staged weights). On a
+          # cluster whose egress isn't rate-limited, set this to "Qwen/Qwen2.5-0.5B-Instruct" to
+          # let vLLM self-download into the same PVC.
+          - "--model=/models/qwen"
+          - "--served-model-name=qwen2.5-0.5b"
+          - "--port=8080"
+          - "--dtype=float32"
+          - "--max-model-len=4096"
+          # CPU has no CUDA-graph path and inductor compile is slow/fragile here — run eager.
+          - "--enforce-eager"
+        env:
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-token
+                key: token
+          - name: HF_HOME
+            value: /models
+          # Reserve RAM for the CPU KV cache explicitly. (Leave VLLM_CPU_OMP_THREADS_BIND unset =
+          # vLLM 'auto': it needs >=2 cores to reserve one and still bind worker threads, which is
+          # why cpu:1 crashed the worker; cpu:2 is fine. v0.23.0 rejects the value "all".)
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "2"
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        volumeMounts:
+          - name: hf-cache
+            mountPath: /models
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 60
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "2"
+            memory: 6Gi
+          # Explicit cpu limit: KServe injects a default cpu limit of 1 when unset, which is < our
+          # request of 2 and makes the Deployment invalid (request must be <= limit).
+          limits:
+            cpu: "3"
+            memory: 10Gi

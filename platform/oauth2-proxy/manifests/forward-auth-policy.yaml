@@ -1,0 +1,46 @@
+# Gateway forward-auth (ADR-0026): agentgateway extAuth → oauth2-proxy. On each request to the
+# portal route, the gateway calls oauth2-proxy /oauth2/auth; a 200 authorizes + copies the identity
+# headers onto the backend request; a 401 redirects the browser to the OIDC sign-in. FailClosed = deny
+# if oauth2-proxy is down (never serve the master-key portal unauthenticated).
+# NOTE: the CEL expressions (path/redirect) + the cross-namespace backendRef need live validation
+# against agentgateway v1.2.1 when the stack is up — this is the one hand-authored integration (research).
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: portal-forward-auth
+  namespace: experience
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: key-portal   # the key-portal chart names its HTTPRoute "key-portal" (not "portal");
+                         # a wrong name leaves the policy Accepted-but-Attached=False → extAuth never runs
+  traffic:
+    extAuth:
+      failureMode: FailClosed
+      backendRef:
+        group: ""
+        kind: Service
+        name: oauth2-proxy
+        namespace: oauth2-proxy
+        port: 80
+      http:
+        path: '"/oauth2/auth"'
+        redirect: '"https://portal.ai-platform.wmx.dev/oauth2/start?rd=" + request.path'
+        allowedRequestHeaders: ["cookie", "authorization"]
+        allowedResponseHeaders: ["x-auth-request-email", "x-auth-request-user"]
+---
+# Lets the experience-ns extAuth policy reference the oauth2-proxy Service across namespaces.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: experience-to-oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  from:
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+      namespace: experience
+  to:
+    - group: ""
+      kind: Service

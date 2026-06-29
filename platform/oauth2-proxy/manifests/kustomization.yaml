@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# oauth2-proxy's ESO secret, the /oauth2 HTTPRoute, and the gateway forward-auth policy (+ ReferenceGrant).
+# Each carries its own namespace. Applied as a git-path source by the oauth2-proxy Argo app.
+resources:
+  - externalsecret.yaml
+  - httproute.yaml
+  - forward-auth-policy.yaml

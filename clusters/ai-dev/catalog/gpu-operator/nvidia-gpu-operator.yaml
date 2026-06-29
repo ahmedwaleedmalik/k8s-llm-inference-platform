@@ -1,0 +1,37 @@
+# NVIDIA GPU Operator (chart v26.3.3) — self-managed GPU stack: driver + container-toolkit +
+# device-plugin + DCGM + NFD/GFD. Exists ONLY when config.yaml gpu_stack=operator (the gpu-operator
+# group is gated on it; resolve-groups). For non-GKE substrates (Hetzner/bare-metal/Vast) where GKE's
+# managed GPU stack is unavailable (ADR-0001 deferred this).
+# Wave 2: alongside the other platform operators, after CRDs (wave 1); the dcgm-exporter ServiceMonitor
+# is created at runtime by the operator, so no Prometheus-CRD dry-run dependency at sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nvidia-gpu-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://nvidia.github.io/gpu-operator
+      chart: gpu-operator
+      targetRevision: v26.3.3
+      helm:
+        valueFiles:
+          - $values/platform/nvidia-gpu-operator/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # operator CRDs (ClusterPolicy, NVIDIADriver) are large

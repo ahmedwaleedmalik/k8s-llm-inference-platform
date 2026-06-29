@@ -1,0 +1,64 @@
+# The minting logic, mirroring scripts/seed-experience-secrets.sh but run BY the cluster, not a human.
+# Idempotent: a still-valid key is kept (no churn on re-sync); a missing/invalid key is re-minted (fresh
+# cluster, or after a LiteLLM DB rebuild that invalidated old keys). The session signer is generated once
+# and preserved across re-syncs so it does not log users out.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-keys-script
+  namespace: experience
+data:
+  mint.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    LITELLM="http://litellm.litellm.svc.cluster.local:4000"
+    EXP_NS=experience
+    LITELLM_NS=litellm
+
+    log() { echo "litellm-keys: $*" >&2; }
+
+    # The vkey can only come from the LIVE proxy — wait for it.
+    for _ in $(seq 1 60); do
+      curl -fsS -m 3 "$LITELLM/health/liveliness" >/dev/null 2>&1 && break
+      log "waiting for litellm proxy..."; sleep 5
+    done
+    curl -fsS -m 3 "$LITELLM/health/liveliness" >/dev/null 2>&1 || { log "litellm proxy not reachable — is the llm-gateway layer up?"; exit 1; }
+
+    master_key="$(kubectl -n "$LITELLM_NS" get secret litellm-secrets -o jsonpath='{.data.PROXY_MASTER_KEY}' | base64 -d)"
+    [ -n "$master_key" ] || { log "no LiteLLM master key in $LITELLM_NS/litellm-secrets"; exit 1; }
+
+    valid_key() { curl -fsS -m 5 "$LITELLM/v1/models" -H "Authorization: Bearer $1" >/dev/null 2>&1; }
+    current_key() { kubectl -n "$EXP_NS" get secret "$1" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d 2>/dev/null || true; }
+    random_hex() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
+    mint() {
+      curl -fsS "$LITELLM/key/generate" \
+        -H "Authorization: Bearer $master_key" -H 'Content-Type: application/json' \
+        -d "{\"key_alias\":\"$1-$(date +%s)\",\"metadata\":{\"app\":\"$1\",\"managed-by\":\"litellm-keys\"}}" \
+        | jq -r '.key'
+    }
+    # ensure_vkey <app> <secret> <datakey> -> prints the vkey to use (kept or freshly minted)
+    ensure_vkey() {
+      local cur; cur="$(current_key "$2" "$3")"
+      if [ -n "$cur" ] && valid_key "$cur"; then log "$2: existing $1 key still valid, keeping"; printf '%s' "$cur"; return; fi
+      log "$2: minting a new $1 key"; local k; k="$(mint "$1")"
+      [ -n "$k" ] && [ "$k" != null ] || { log "mint failed for $1"; return 1; }
+      printf '%s' "$k"
+    }
+
+    # open-webui: minted vkey + a persistent random session signer, one secret.
+    owui_vkey="$(ensure_vkey open-webui openwebui-secrets OPENAI_API_KEY)"
+    session="$(current_key openwebui-secrets WEBUI_SECRET_KEY)"
+    [ -n "$session" ] || session="$(random_hex)"
+    kubectl -n "$EXP_NS" create secret generic openwebui-secrets \
+      --from-literal=OPENAI_API_KEY="$owui_vkey" \
+      --from-literal=WEBUI_SECRET_KEY="$session" \
+      --dry-run=client -o yaml | kubectl apply -f - >&2
+
+    # tabby: minted vkey, substituted into its config.toml by an initContainer.
+    tabby_vkey="$(ensure_vkey tabby tabby-secrets LITELLM_VKEY)"
+    kubectl -n "$EXP_NS" create secret generic tabby-secrets \
+      --from-literal=LITELLM_VKEY="$tabby_vkey" \
+      --dry-run=client -o yaml | kubectl apply -f - >&2
+
+    log "done"

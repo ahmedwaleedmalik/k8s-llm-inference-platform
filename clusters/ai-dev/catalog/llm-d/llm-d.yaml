@@ -1,0 +1,28 @@
+# llm-d: one KServe LLMInferenceService with prefill/decode disaggregation +
+# KV-aware routing, ISOLATED in its own `llm-d` ns + own gateway/GIE. Wave 4 (workload) — after the
+# KServe controller + CRDs (waves 1-2) and the GIE/Gateway-API CRDs. Plain kustomize, like kserve-demo.
+# Needs >=2 GPUs to run (1 prefill + 1 decode); see serving/llm-d/README.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: llm-d
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/llm-d
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: llm-d
+  # Manual-sync: a GPU serving path brought up deliberately, never auto-healed — kills the cost
+  # footgun (selfHeal re-running a scaled-down GPU pod) and keeps the isolated GIE contained.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # LLMInferenceService is a large alpha CRD (same trap as KServe/GIE CRDs)

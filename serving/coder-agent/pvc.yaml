@@ -1,0 +1,14 @@
+# Model cache (HF_HOME) for the 14B-Instruct-AWQ weights (~9GB). Separate PVC per model so the coder
+# models don't contend on one RWO volume. RWO is fine for a single replica.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coder-agent-model-cache
+  namespace: serving
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 40Gi

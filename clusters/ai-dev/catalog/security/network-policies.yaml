@@ -1,0 +1,25 @@
+# SR1 (ADR-0029) — default-deny + allow-trusted NetworkPolicies that make LiteLLM the sole authorized
+# caller of the serving + inference namespaces. Plain manifests (no CRDs) → wave 1. The target
+# namespaces (serving, inference) are created by the serving-core / routing-core groups; selfHeal
+# retries until they exist, so group ordering is not required.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: network-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/security/network-policies
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

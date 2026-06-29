@@ -1,0 +1,26 @@
+# Shared serving API key, fetched from the configured External Secrets backend. GPU workloads stay
+# manual/scale-to-zero, but this cheap prerequisite is auto-synced so doctor and later bring-up work.
+# Populate the backing secret once:
+#   openssl rand -hex 24 | tr -d '\n' | gcloud secrets create vllm-api-key --data-file=- --project "$PROJECT"
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: vllm-api-key
+  namespace: serving
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: secret-store
+  target:
+    name: vllm-api-key
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: api-key
+      remoteRef:
+        key: vllm-api-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore

@@ -1,0 +1,10 @@
+# Dedicated namespace for the llm-d disaggregated-serving path. ISOLATION boundary: the
+# LLMInferenceService bundles its OWN Gateway + HTTPRoute + InferencePool + EPP scheduler, all
+# created in THIS namespace. Keeping it in its own ns is what stops its bundled GIE
+# from colliding with or replacing the reference agentgateway+GIE InferencePool (ns `serving`).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-d
+  labels:
+    app.kubernetes.io/part-of: llm-d

@@ -1,0 +1,12 @@
+# Kyverno (chart 3.8.1 / app v1.18.1) — admission policy engine for SR2 (ADR-0029): reject GPU pods
+# that bypass Kueue quota. Lab footprint: single replica per controller (the chart defaults to 3 for
+# the admission controller — HA we don't need in a single-node-pool lab). The reports/cleanup
+# controllers stay on so policy reports populate, but scaled to 1. Bump replicas for a prod profile.
+admissionController:
+  replicas: 1
+backgroundController:
+  replicas: 1
+reportsController:
+  replicas: 1
+cleanupController:
+  replicas: 1

@@ -1,0 +1,17 @@
+# In-cluster OpenAI-compatible endpoint. No domain yet (config.yaml domain: "") —
+# reach it out-of-cluster via `kubectl -n serving port-forward svc/raw-vllm 8000:8000`
+# (see scripts/smoke-chat.sh). An ingress Gateway/HTTPRoute can front this once a domain exists.
+apiVersion: v1
+kind: Service
+metadata:
+  name: raw-vllm
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: raw-vllm
+spec:
+  selector:
+    app.kubernetes.io/name: raw-vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

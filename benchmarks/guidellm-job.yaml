@@ -1,0 +1,170 @@
+# Serving benchmark — GuideLLM open-loop `sweep` against any OpenAI-compatible endpoint, yielding the
+# latency-vs-throughput SLO frontier (max-RPS-at-SLO) that ADR-0003 wants. GuideLLM is the standard
+# serving-load tool (ADR-0032); `vllm bench serve` (benchmarks/job.yaml) is demoted to a zero-dep smoke.
+#
+# AUTH GOTCHA (guidellm v0.5.0): the openai_http backend never reads settings.openai.api_key /
+# bearer_token, so GUIDELLM__OPENAI__API_KEY is silently ignored and every POST to an auth-enforcing
+# server returns 401 — which presents as "0 completions / Invalid rates in sweep". The only header path
+# that reaches the wire is the request formatter's extras.headers, injected below via
+# --request-formatter-kwargs. Confirmed on GKE T4 + vLLM v0.23.0: POSTs return 200 once set this way.
+#   make bench-guidellm        # default target = raw-vllm (run `make vllm-up` first)
+#
+# TARGET-AGNOSTIC: reuses the same optional `bench-target` ConfigMap (BASE_URL/BENCH_MODEL/TOKENIZER)
+# and `bench-target-auth` Secret (OPENAI_API_KEY = a LiteLLM virtual key) as the vLLM-bench job, so the
+# same matrix benchmarks raw-vllm, KServe, or LiteLLM. See docs runbook benchmarking.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guidellm-bench
+  namespace: serving
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=run-to-completion benchmark Job; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=run-to-completion benchmark Job; no service endpoint to readiness-probe
+    checkov.io/skip3: CKV_K8S_35=bearer token must reach the GuideLLM/OpenAI client via env (GUIDELLM__OPENAI__API_KEY); file-mounted secrets are not supported
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: guidellm-bench
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: raw-vllm
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: guidellm
+          image: ghcr.io/vllm-project/guidellm:v0.5.0@sha256:aa87fb5569bbeefede3f867559f4c0e16c167a1b392abb47c4084ddd9b5cb284 # pinned — flag syntax drifts across tags
+          imagePullPolicy: Always
+          env:
+            - name: DEFAULT_API_KEY # raw-vllm bearer; LiteLLM vkey (bench-target-auth) wins
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-key
+                  key: api-key
+            # readOnlyRootFilesystem: tokenizer download + the report land on the writable /tmp emptyDir.
+            - name: HF_HOME
+              value: /tmp/hf
+            - name: HOME
+              value: /tmp
+            # GPU $/hr for cost amortization. Defaults to 0.85 (g2-standard-4 L4 on-demand list,
+            # us-central1) in the script below; override per GPU/region via the bench-target ConfigMap
+            # (envFrom) — e.g. GPU_COST_PER_HR=0.54 for n1-standard-4 + T4. (An explicit env here would
+            # shadow envFrom and break that override, so it is intentionally set as a script default.)
+          envFrom:
+            - configMapRef:
+                name: bench-target
+                optional: true
+            - secretRef:
+                name: bench-target-auth
+                optional: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              BASE_URL="${BASE_URL:-http://raw-vllm:8000}"
+              BENCH_MODEL="${BENCH_MODEL:-qwen2.5-0.5b-instruct}"
+              TOKENIZER="${TOKENIZER:-Qwen/Qwen2.5-0.5B-Instruct}"
+              # raw-vllm enforces Authorization: Bearer <key>. guidellm v0.5.0 ignores its api_key
+              # settings (see header), so the key only reaches the wire through the formatter's
+              # extras.headers below. LiteLLM vkey (bench-target-auth → OPENAI_API_KEY) wins when set.
+              APIKEY="${OPENAI_API_KEY:-$DEFAULT_API_KEY}"
+              # Raw-JSON artifact convention (benchmarks README): results/<date>-<gpu>-<model>/.
+              # GPU/MODEL_SLUG default to the L4/Qwen baseline; override via bench-target for other runs.
+              RUN_DIR="$(date +%F)-${GPU_SLUG:-l4}-${MODEL_SLUG:-qwen2.5-0.5b}"
+              OUT="/tmp/guidellm/$RUN_DIR"; mkdir -p "$OUT"
+              echo "target: $BASE_URL  model: $BENCH_MODEL  run: $RUN_DIR  gpu \$/hr: ${GPU_COST_PER_HR:-0.85}"
+              # Open-loop sweep: GuideLLM ramps request rate to find the throughput/latency frontier.
+              guidellm benchmark run \
+                --target "$BASE_URL" \
+                --model "$BENCH_MODEL" \
+                --processor "$TOKENIZER" \
+                --rate-type sweep \
+                --max-seconds "${MAX_SECONDS:-30}" \
+                --data 'kind=synthetic_text,prompt_tokens=256,output_tokens=128' \
+                --request-formatter-kwargs "{\"extras\":{\"headers\":{\"Authorization\":\"Bearer ${APIKEY}\"}}}" \
+                --output-path "$OUT/report.json"
+              # Trim the multi-MB per-request logs AND redact the bearer token (GuideLLM records the
+              # --request-formatter-kwargs headers verbatim in args). The aggregated metrics that back
+              # the table remain. This trimmed file is the artifact to commit and what is emitted below.
+              python3 - "$OUT/report.json" "$OUT/report.trimmed.json" <<'PY'
+              import json, sys
+              r = json.load(open(sys.argv[1]))
+              def redact(o):
+                  if isinstance(o, dict):
+                      for k, v in list(o.items()):
+                          if isinstance(v, str) and (k in ("Authorization", "api_key", "bearer_token") or v.startswith("Bearer ")):
+                              o[k] = "<redacted>"
+                          else:
+                              redact(v)
+                  elif isinstance(o, list):
+                      for v in o:
+                          redact(v)
+              for b in r.get("benchmarks", []):
+                  b.pop("requests", None)
+              redact(r)
+              json.dump(r, open(sys.argv[2], "w"), separators=(",", ":"))
+              PY
+              # Full standard per rate: req/s, ERROR RATE, TTFT/ITL p50/p95/p99, and $/1k-req cost.
+              python3 - "$OUT/report.trimmed.json" "${GPU_COST_PER_HR:-0.85}" <<'PY' || echo "(summary skipped — inspect report.json)"
+              import json, sys
+              r, cost_hr = json.load(open(sys.argv[1])), float(sys.argv[2])
+              print("STRATEGY       rate  req/s  err%   TTFT p50/p95/p99 ms   ITL p50/p95/p99 ms   $/1k-req")
+              for b in r.get("benchmarks", []):
+                  m = b["metrics"]; rt = m["request_totals"]; st = b.get("config", {}).get("strategy", {})
+                  ok, err = rt["successful"], rt["errored"]
+                  errpct = 100 * err / (ok + err) if (ok + err) else 0.0
+                  rps = m["requests_per_second"]["successful"]["mean"]
+                  rate = st.get("rate"); rate = f"{rate:5.1f}" if isinstance(rate, (int, float)) else "    -"
+                  def pc(name, p): return m[name]["successful"]["percentiles"][f"p{p}"]
+                  c1k = (cost_hr / 3600.0) / rps * 1000 if rps else 0.0
+                  print(f"{st.get('type_','?'):12} {rate}  {rps:5.1f}  {errpct:4.1f}  "
+                        f"{pc('time_to_first_token_ms',50):5.0f}/{pc('time_to_first_token_ms',95):5.0f}/{pc('time_to_first_token_ms',99):5.0f}  "
+                        f"{pc('inter_token_latency_ms',50):5.1f}/{pc('inter_token_latency_ms',95):5.1f}/{pc('inter_token_latency_ms',99):5.1f}  "
+                        f"${c1k:7.4f}")
+              PY
+              # Retrieval: `make bench-guidellm` returns once the Job completes, and kubectl cp cannot
+              # reach a completed pod — so the trimmed JSON is emitted to the log between the markers
+              # below. Copy it out with (the make target already prints these logs):
+              #   kubectl -n serving logs job/guidellm-bench | sed -n '/GUIDELLM_REPORT_BEGIN/,/GUIDELLM_REPORT_END/p' | sed '1d;$d' > benchmarks/results/$RUN_DIR/report.json
+              echo "GUIDELLM_REPORT_BEGIN"
+              cat "$OUT/report.trimmed.json"
+              echo
+              echo "GUIDELLM_REPORT_END"
+              echo "Copy the artifact into benchmarks/results/$RUN_DIR/report.json — see the command above."
+      volumes:
+        - name: tmp
+          emptyDir: {}

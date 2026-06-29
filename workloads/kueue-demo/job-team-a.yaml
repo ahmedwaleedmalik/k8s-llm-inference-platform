@@ -1,0 +1,48 @@
+# team-a GPU job (low priority). Opts into Kueue via the queue-name label and starts
+# suspended; Kueue admits it when the GPU quota (1) is free, then un-suspends it. The
+# GPU taint toleration is injected by the `gpu-any` ResourceFlavor, not set here.
+#   kubectl apply -f workloads/kueue-demo/job-team-a.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-job-a
+  namespace: team-a
+  labels:
+    kueue.x-k8s.io/queue-name: team-a-gpu
+    kueue.x-k8s.io/priority-class: low-priority
+  annotations:
+    checkov.io/skip1: CKV_K8S_8=batch Job holds the GPU then exits; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=batch Job holds the GPU then exits; no service endpoint to readiness-probe
+spec:
+  parallelism: 1
+  completions: 1
+  suspend: true # Kueue flips this to false on admission
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: burn
+          image: nvidia/cuda:12.4.0-base-ubuntu22.04@sha256:80d4d9ac041242f6ae5d05f9be262b3374e0e0b8bb5a49c6c3e94e192cde4a44
+          imagePullPolicy: Always
+          command: ["bash", "-c", "nvidia-smi; echo 'team-a holding the GPU'; sleep 600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "1"
+              memory: 2Gi

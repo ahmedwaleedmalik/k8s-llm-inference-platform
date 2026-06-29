@@ -1,0 +1,40 @@
+# Values for the public litellm-key-portal chart (ghcr.io/ahmedwaleedmalik/charts/litellm-key-portal),
+# consumed by clusters/ai-dev/catalog/experience/key-portal.yaml. Reproduces the platform's prior raw
+# manifests (ADR-0026): the SSO portal behind the gateway forward-auth, master key from GSM via ESO,
+# reachable only from the gateway data-plane namespace.
+fullnameOverride: key-portal
+
+config:
+  litellmURL: http://litellm.litellm.svc.cluster.local:4000
+  identityHeader: X-Auth-Request-Email
+  models:
+    - coder-chat
+    - coder-fim
+    - coder-agent
+    - embeddings
+    - qwen-local
+  maxBudget: "20"
+  budgetDuration: 30d
+
+externalSecret:
+  enabled: true
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: secret-store
+  remoteKey: litellm-master-key
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: portal-https
+  hostnames:
+    - portal.ai-platform.wmx.dev
+
+networkPolicy:
+  enabled: true
+  # agentgateway runs the per-Gateway DATAPLANE proxy in the Gateway's own namespace (experience),
+  # not in agentgateway-system (which holds only the controller). Ingress must allow the dataplane's
+  # namespace or the gateway→key-portal hop fails with "upstream Connect: deadline elapsed".
+  fromNamespace: experience

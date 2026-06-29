@@ -1,0 +1,2 @@
+cluster: { projectID: ai-lab }
+secret_store_auth: sa-key

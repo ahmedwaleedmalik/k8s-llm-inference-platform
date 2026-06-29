@@ -1,0 +1,11 @@
+# Optional shared-state backend. Copy to backend.tf only after creating the bucket out-of-band:
+#
+#   gcloud storage buckets create gs://<project>-tofu-state --location=us-central1
+#
+# Keep backend.tf out of git if it contains fork-specific names.
+terraform {
+  backend "gcs" {
+    bucket = "<project>-tofu-state"
+    prefix = "k8s-llm-inference-platform/hetzner"
+  }
+}

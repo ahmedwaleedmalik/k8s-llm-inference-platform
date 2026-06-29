@@ -1,0 +1,5 @@
+# agentgateway gateway/data-plane. inferenceExtension.enabled wires it to the Gateway API
+# Inference Extension so a Gateway can route to InferencePool backends, delegating endpoint
+# selection to the pool's Endpoint Picker (EPP). Chart pinned at the app (v1.2.1).
+inferenceExtension:
+  enabled: true

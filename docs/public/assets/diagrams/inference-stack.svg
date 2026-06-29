@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 838" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, Arial, sans-serif">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B2436"/><stop offset="1" stop-color="#131A29"/>
+    </linearGradient>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161E2E"/><stop offset="1" stop-color="#0E1421"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C9CFF"/><stop offset="0.5" stop-color="#F2B45B"/><stop offset="1" stop-color="#9AA6BC"/>
+    </linearGradient>
+    <style>
+      .mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+      .eye  { fill:#5E6B82; letter-spacing:3px; font-size:12px; font-weight:600; }
+      .h1   { fill:#EEF2FA; font-size:30px; font-weight:700; letter-spacing:-0.5px; }
+      .sub  { fill:#8A97AD; font-size:13.5px; }
+      .lyr  { fill:#EBF0F8; font-size:19px; font-weight:700; letter-spacing:-0.3px; }
+      .desc { fill:#828FA6; font-size:13px; }
+      .idx  { font-size:14px; font-weight:700; }
+      .tag  { fill:#1C2740; stroke:#30405E; stroke-width:1; }
+      .tagt { fill:#B9C4D8; font-size:12px; }
+      .lip  { fill:#080C15; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="920" height="838" rx="20" fill="#0B0F19"/>
+
+  <!-- header -->
+  <text x="56" y="50" class="eye mono">ARCHITECTURE</text>
+  <text x="56" y="82" class="h1">LLM Inference Stack</text>
+  <text x="56" y="106" class="sub">Request path top to bottom, GitOps-reconciled on Kubernetes</text>
+
+  <!-- request flow spine -->
+  <text x="58" y="142" class="eye mono" text-anchor="middle" fill="#5E6B82">REQ</text>
+  <line x1="58" y1="156" x2="58" y2="700" stroke="url(#flow)" stroke-width="2.5"/>
+  <polygon points="58,712 52,700 64,700" fill="#9AA6BC"/>
+
+  <!-- ============ LAYER 01 — Experience ============ -->
+  <g>
+    <rect x="80" y="122" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="118" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="119" x2="850" y2="119" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="164" r="4.5" fill="#7C9CFF"/><circle cx="58" cy="164" r="9" fill="none" stroke="#7C9CFF" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="141" width="4" height="46" rx="2" fill="#7C9CFF"/>
+    <text x="120" y="168" class="idx mono" fill="#7C9CFF">01</text>
+    <text x="158" y="162" class="lyr">Experience</text>
+    <text x="158" y="184" class="desc">Developer and end-user surfaces</text>
+    <g class="mono"><rect x="612" y="151" width="92" height="26" rx="7" class="tag"/><text x="658" y="168" class="tagt" text-anchor="middle">Open WebUI</text>
+    <rect x="714" y="151" width="57" height="26" rx="7" class="tag"/><text x="742" y="168" class="tagt" text-anchor="middle">demos</text>
+    <rect x="781" y="151" width="43" height="26" rx="7" class="tag"/><text x="802" y="168" class="tagt" text-anchor="middle">SDK</text></g>
+  </g>
+
+  <!-- ============ LAYER 02 — Tenant edge ============ -->
+  <g>
+    <rect x="80" y="228" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="224" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="225" x2="850" y2="225" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="270" r="4.5" fill="#5BD2A0"/><circle cx="58" cy="270" r="9" fill="none" stroke="#5BD2A0" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="247" width="4" height="46" rx="2" fill="#5BD2A0"/>
+    <text x="120" y="274" class="idx mono" fill="#5BD2A0">02</text>
+    <text x="158" y="268" class="lyr">Tenant edge · LiteLLM</text>
+    <text x="158" y="290" class="desc">Tenancy boundary: identity, budgets, guardrails</text>
+    <g class="mono"><rect x="468" y="241" width="106" height="26" rx="7" class="tag"/><text x="521" y="258" class="tagt" text-anchor="middle">virtual keys</text>
+    <rect x="584" y="241" width="71" height="26" rx="7" class="tag"/><text x="619" y="258" class="tagt" text-anchor="middle">budgets</text>
+    <rect x="665" y="241" width="106" height="26" rx="7" class="tag"/><text x="718" y="258" class="tagt" text-anchor="middle">spend ledger</text>
+    <rect x="781" y="241" width="43" height="26" rx="7" class="tag"/><text x="802" y="258" class="tagt" text-anchor="middle">SSO</text>
+    <rect x="655" y="273" width="169" height="26" rx="7" class="tag"/><text x="739" y="290" class="tagt" text-anchor="middle">PII + injection guard</text></g>
+  </g>
+
+  <!-- ============ LAYER 03 — Routing ============ -->
+  <g>
+    <rect x="80" y="334" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="330" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="331" x2="850" y2="331" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="376" r="4.5" fill="#F2B45B"/><circle cx="58" cy="376" r="9" fill="none" stroke="#F2B45B" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="353" width="4" height="46" rx="2" fill="#F2B45B"/>
+    <text x="120" y="380" class="idx mono" fill="#F2B45B">03</text>
+    <text x="158" y="374" class="lyr">Inference-aware routing</text>
+    <text x="158" y="396" class="desc">Gateway API Inference Extension on agentgateway</text>
+    <g class="mono"><rect x="605" y="363" width="43" height="26" rx="7" class="tag"/><text x="626" y="380" class="tagt" text-anchor="middle">GIE</text>
+    <rect x="658" y="363" width="113" height="26" rx="7" class="tag"/><text x="714" y="380" class="tagt" text-anchor="middle">InferencePool</text>
+    <rect x="781" y="363" width="43" height="26" rx="7" class="tag"/><text x="802" y="380" class="tagt" text-anchor="middle">EPP</text></g>
+  </g>
+
+  <!-- ============ LAYER 04 — Serving ============ -->
+  <g>
+    <rect x="80" y="440" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="436" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="437" x2="850" y2="437" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="482" r="4.5" fill="#F2768E"/><circle cx="58" cy="482" r="9" fill="none" stroke="#F2768E" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="459" width="4" height="46" rx="2" fill="#F2768E"/>
+    <text x="120" y="486" class="idx mono" fill="#F2768E">04</text>
+    <text x="158" y="480" class="lyr">Serving runtime</text>
+    <text x="158" y="502" class="desc">OpenAI-compatible model servers</text>
+    <g class="mono"><rect x="633" y="469" width="50" height="26" rx="7" class="tag"/><text x="658" y="486" class="tagt" text-anchor="middle">vLLM</text>
+    <rect x="693" y="469" width="64" height="26" rx="7" class="tag"/><text x="725" y="486" class="tagt" text-anchor="middle">KServe</text>
+    <rect x="767" y="469" width="57" height="26" rx="7" class="tag"/><text x="795" y="486" class="tagt" text-anchor="middle">llm-d</text></g>
+  </g>
+
+  <!-- ============ LAYER 05 — GPU scheduling ============ -->
+  <g>
+    <rect x="80" y="546" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="542" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="543" x2="850" y2="543" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="588" r="4.5" fill="#59C2E8"/><circle cx="58" cy="588" r="9" fill="none" stroke="#59C2E8" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="565" width="4" height="46" rx="2" fill="#59C2E8"/>
+    <text x="120" y="592" class="idx mono" fill="#59C2E8">05</text>
+    <text x="158" y="586" class="lyr">GPU scheduling and scaling</text>
+    <text x="158" y="608" class="desc">Quota admission, queue-driven autoscale, telemetry</text>
+    <g class="mono"><rect x="647" y="575" width="57" height="26" rx="7" class="tag"/><text x="675" y="592" class="tagt" text-anchor="middle">Kueue</text>
+    <rect x="714" y="575" width="50" height="26" rx="7" class="tag"/><text x="739" y="592" class="tagt" text-anchor="middle">KEDA</text>
+    <rect x="774" y="575" width="50" height="26" rx="7" class="tag"/><text x="799" y="592" class="tagt" text-anchor="middle">DCGM</text></g>
+  </g>
+
+  <!-- ============ LAYER 06 — Substrate ============ -->
+  <g>
+    <rect x="80" y="652" width="784" height="92" rx="14" class="lip"/>
+    <rect x="80" y="648" width="784" height="92" rx="14" fill="url(#plate)" stroke="#28344B" stroke-width="1.2"/>
+    <line x1="94" y1="649" x2="850" y2="649" stroke="#37486A" stroke-width="1" opacity="0.6"/>
+    <circle cx="58" cy="694" r="4.5" fill="#9AA6BC"/><circle cx="58" cy="694" r="9" fill="none" stroke="#9AA6BC" stroke-width="1" opacity="0.4"/>
+    <rect x="100" y="671" width="4" height="46" rx="2" fill="#9AA6BC"/>
+    <text x="120" y="698" class="idx mono" fill="#9AA6BC">06</text>
+    <text x="158" y="692" class="lyr">Cloud substrate · OpenTofu</text>
+    <text x="158" y="714" class="desc">GKE cluster and Workload Identity</text>
+    <g class="mono"><rect x="532" y="667" width="141" height="26" rx="7" class="tag"/><text x="602" y="684" class="tagt" text-anchor="middle">Workload Identity</text>
+    <rect x="683" y="667" width="141" height="26" rx="7" class="tag"/><text x="753" y="684" class="tagt" text-anchor="middle">Artifact Registry</text>
+    <rect x="679" y="699" width="43" height="26" rx="7" class="tag"/><text x="700" y="716" class="tagt" text-anchor="middle">GKE</text>
+    <rect x="732" y="699" width="92" height="26" rx="7" class="tag"/><text x="778" y="716" class="tagt" text-anchor="middle">node pools</text></g>
+  </g>
+
+  <!-- ============ foundation plinth ============ -->
+  <rect x="64" y="762" width="816" height="58" rx="12" fill="url(#base)" stroke="#222C40" stroke-width="1.2"/>
+  <text x="88" y="789" class="eye mono" fill="#6B7890">FOUNDATION</text>
+  <text x="88" y="806" class="desc" fill="#9AA6BC">spans every layer</text>
+  <g class="mono"><rect x="404" y="778" width="120" height="26" rx="7" class="tag"/><text x="464" y="795" class="tagt" text-anchor="middle">Argo CD GitOps</text>
+  <rect x="534" y="778" width="134" height="26" rx="7" class="tag"/><text x="601" y="795" class="tagt" text-anchor="middle">External Secrets</text>
+  <rect x="678" y="778" width="162" height="26" rx="7" class="tag"/><text x="759" y="795" class="tagt" text-anchor="middle">Prometheus + Grafana</text></g>
+</svg>

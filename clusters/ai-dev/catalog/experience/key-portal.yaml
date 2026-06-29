@@ -1,0 +1,35 @@
+# Key-portal (ADR-0026): SSO login → self-serve LiteLLM vkey lifecycle (list/create/rotate/revoke,
+# budget + model-allowlist, ownership enforced server-side). Public OCI Helm chart + git values ref. Auto-sync;
+# feature-gated via resolve-groups (only present when domain + dns/identity are enabled) so it stays
+# opt-in without a manual sync step. Wave 5.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: key-portal
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  sources:
+    - repoURL: ghcr.io/ahmedwaleedmalik/charts
+      chart: litellm-key-portal
+      targetRevision: 0.3.0
+      helm:
+        releaseName: key-portal
+        valueFiles:
+          - $values/platform/key-portal/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: experience
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

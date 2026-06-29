@@ -1,0 +1,51 @@
+# SR2 (ADR-0029) — gate GPU admission. Kueue admission is opt-in: only pods carrying
+# `kueue.x-k8s.io/queue-name` are queued/quota-checked. A GPU pod WITHOUT the label bypasses quota
+# and fair-share entirely. This policy rejects any pod requesting nvidia.com/gpu, in a Kueue-managed
+# namespace, that lacks the label.
+#
+# SCOPE = namespaces labelled `llm-platform/kueue-managed: "true"`, NOT a blanket match. The platform's
+# own model servers (serving ns: vLLM, coder-*) are operator-managed infra and do NOT carry a
+# queue-name — matching them would reject the platform itself. Label TENANT namespaces (team-*) with
+# `llm-platform/kueue-managed=true` to bring their GPU jobs under the gate. Chosen over Kueue's
+# `manageJobsWithoutQueueName` (too blunt — suspends everything) and a silent mutate-inject (an
+# explicit deny is auditable).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-kueue-queue-name
+  annotations:
+    policies.kyverno.io/title: Require Kueue queue-name on GPU pods
+    policies.kyverno.io/category: Quota Enforcement (ADR-0029 SR2)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      GPU pods in a Kueue-managed namespace must carry the kueue.x-k8s.io/queue-name label, so they
+      cannot bypass Kueue quota and fair-share.
+spec:
+  background: true
+  rules:
+    - name: gpu-pod-must-have-queue-name
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaceSelector:
+                matchLabels:
+                  llm-platform/kueue-managed: "true"
+      preconditions:
+        any:
+          - key: "{{ request.object.spec.containers[?resources.requests.\"nvidia.com/gpu\"] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.object.spec.containers[?resources.limits.\"nvidia.com/gpu\"] | length(@) }}"
+            operator: GreaterThan
+            value: 0
+      validate:
+        failureAction: Enforce
+        message: >-
+          GPU pods in a Kueue-managed namespace must set the kueue.x-k8s.io/queue-name label so Kueue
+          can enforce quota (ADR-0029 SR2).
+        pattern:
+          metadata:
+            labels:
+              kueue.x-k8s.io/queue-name: "?*"

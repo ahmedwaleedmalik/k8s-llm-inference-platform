@@ -1,0 +1,15 @@
+# In-cluster embeddings endpoint. LiteLLM routes to this Service (model_list: embeddings).
+apiVersion: v1
+kind: Service
+metadata:
+  name: embeddings
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: embeddings
+spec:
+  selector:
+    app.kubernetes.io/name: embeddings
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

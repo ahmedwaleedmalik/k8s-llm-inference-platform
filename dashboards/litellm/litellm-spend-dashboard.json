@@ -1,0 +1,137 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "schemaVersion": 39,
+  "version": 1,
+  "title": "LiteLLM: Spend & Budgets",
+  "uid": "litellm-spend",
+  "tags": ["litellm", "llm-platform", "spend"],
+  "time": { "from": "now-7d", "to": "now" },
+  "timezone": "browser",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total spend ($)",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(sum(spend), 0) AS \"total\" FROM \"LiteLLM_SpendLogs\" WHERE $__timeFilter(\"startTime\")"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total tokens",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(sum(total_tokens), 0) AS \"tokens\" FROM \"LiteLLM_SpendLogs\" WHERE $__timeFilter(\"startTime\")"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Spend over time ($)",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "custom": { "drawStyle": "bars", "fillOpacity": 40 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(\"startTime\", '1h'), sum(spend) AS \"spend\" FROM \"LiteLLM_SpendLogs\" WHERE $__timeFilter(\"startTime\") GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "piechart",
+      "title": "Spend by model ($)",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": true }, "legend": { "displayMode": "table", "placement": "right", "values": ["value"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT model AS \"metric\", sum(spend) AS \"value\" FROM \"LiteLLM_SpendLogs\" WHERE $__timeFilter(\"startTime\") GROUP BY model ORDER BY 2 DESC"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tokens over time (prompt vs completion)",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(\"startTime\", '1h'), sum(prompt_tokens) AS \"prompt\", sum(completion_tokens) AS \"completion\" FROM \"LiteLLM_SpendLogs\" WHERE $__timeFilter(\"startTime\") GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Spend by key",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": {}, "overrides": [ { "matcher": { "id": "byName", "options": "spend" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 4 } ] } ] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(v.key_alias, s.api_key) AS \"key\", sum(s.spend) AS \"spend\", sum(s.total_tokens) AS \"tokens\" FROM \"LiteLLM_SpendLogs\" s LEFT JOIN \"LiteLLM_VerificationToken\" v ON s.api_key = v.token WHERE $__timeFilter(s.\"startTime\") GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Remaining budget per key",
+      "datasource": { "type": "postgres", "uid": "litellm-spend" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": {}, "overrides": [ { "matcher": { "id": "byRegexp", "options": "budget|spend|remaining" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 4 } ] } ] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "litellm-spend" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(key_alias, key_name) AS \"key\", max_budget AS \"budget\", spend, (max_budget - spend) AS \"remaining\" FROM \"LiteLLM_VerificationToken\" WHERE max_budget IS NOT NULL ORDER BY remaining ASC"
+        }
+      ]
+    }
+  ]
+}

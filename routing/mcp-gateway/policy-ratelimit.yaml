@@ -1,0 +1,21 @@
+# Rate-limit the MCP route (ADR-0033). Caps tool-call volume per agentic client so a runaway agent
+# loop cannot hammer the tool server — the governance lever that makes the gateway worth standing in
+# front of an otherwise-open MCP server. Local (in-proxy) limiter = zero extra deps for the lab; a
+# multi-replica gateway would graduate to a shared/global limiter (same shape as the LiteLLM Redis
+# budget-cache note in ADR-0029 SR3). Tuned low on purpose: this is a demo tool plane, not hot path.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: mcp-rate-limit
+  namespace: mcp-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp
+  traffic:
+    rateLimit:
+      local:
+        - requests: 5
+          unit: Seconds
+          burst: 10

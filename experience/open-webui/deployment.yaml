@@ -1,0 +1,106 @@
+# Open WebUI — chat front door. Source-available license (custom "Open WebUI License", non-OSI
+# since v0.6.6 — a documented exception to the clean-permissive bar). Talks ONLY to the LiteLLM
+# gateway (Ollama disabled), so all chat traffic is keyed + budgeted. OPENAI_API_KEY is a minted LiteLLM
+# virtual key (from the openwebui-secrets Secret — created at deploy, kept out of git).
+# VERIFY the image tag before deploy (pin a digest for prod).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: experience
+  labels:
+    app.kubernetes.io/name: open-webui
+  annotations:
+    checkov.io/skip1: CKV_K8S_35=Open WebUI reads OPENAI_API_KEY / WEBUI_SECRET_KEY / OAUTH_CLIENT_SECRET only from env vars; file-mounted secrets are not supported
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: open-webui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: open-webui
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:0.9.6@sha256:90eae5b419e40b4c3dd684582b2c83440b36f9ae2f6532c09639b2ba4ee65158
+          imagePullPolicy: Always
+          env:
+            # readOnlyRootFilesystem: anchor HOME + the HF/sentence-transformers cache on the writable
+            # data PVC (DATA_DIR defaults to /app/backend/data); /tmp is a writable emptyDir below.
+            - name: HOME
+              value: /app/backend/data
+            - name: HF_HOME
+              value: /app/backend/data/cache
+            - name: OPENAI_API_BASE_URL
+              value: http://litellm.litellm.svc.cluster.local:4000/v1
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-secrets
+                  key: OPENAI_API_KEY        # a minted LiteLLM virtual key
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-secrets
+                  key: WEBUI_SECRET_KEY      # random; signs sessions
+            - name: ENABLE_OLLAMA_API
+              value: "false"                 # gateway-only — no direct Ollama
+            - name: ENABLE_FORWARD_USER_INFO_HEADERS
+              value: "true"                  # forward the SSO user as X-OpenWebUI-User-* so LiteLLM buckets spend per end-user (see litellm user_header_mappings), not on the one shared vkey
+            - name: ENABLE_LOGIN_FORM
+              value: "false"                 # SSO-only: hide email/password sign-in + sign-up; Dex is the sole login
+            - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
+              value: "true"                  # Dex login maps to the existing account by verified email → keeps admin role
+            - name: ENABLE_OAUTH_SIGNUP
+              value: "true"
+            - name: OAUTH_PROVIDER_NAME
+              value: "Dex"
+            - name: OPENID_PROVIDER_URL
+              value: https://auth.ai-platform.wmx.dev/.well-known/openid-configuration
+            - name: OPENID_REDIRECT_URI
+              value: https://chat.ai-platform.wmx.dev/oauth/oidc/callback
+            - name: OAUTH_CLIENT_ID
+              value: open-webui
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: open-webui-oidc
+                  key: client-secret
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /app/backend/data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: "500m", memory: 1Gi }
+            limits: { cpu: "2", memory: 2Gi }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: open-webui-data
+        - name: tmp
+          emptyDir: {}

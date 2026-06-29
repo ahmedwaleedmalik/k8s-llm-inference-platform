@@ -1,0 +1,12 @@
+# Request priority for the real pool (mirrors the sim demo's objectives). Lives in `serving`
+# alongside the pool it references. alpha schema (v1alpha2) while InferencePool is GA.
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: interactive
+  namespace: serving
+spec:
+  priority: 10
+  poolRef:
+    group: inference.networking.k8s.io
+    name: raw-vllm

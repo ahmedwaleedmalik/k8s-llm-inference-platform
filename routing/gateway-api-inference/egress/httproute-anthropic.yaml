@@ -1,0 +1,31 @@
+# External egress rule. Same front door as the local path: attaches cross-namespace to the shared
+# `inference-gateway` (allowed by its allowedRoutes: from: All), and matches the
+# X-Gateway-Base-Model-Name header that the BBR policy already populates from the request body's
+# `model`. A client (via LiteLLM) sending model=claude-haiku-4-5 therefore lands here and exits through
+# the AnthropicBackend — one governed egress for local + external alike.
+#
+# Route+backend are same-namespace (agentgateway-system) on purpose, mirroring the local path's
+# route+pool co-location: only the route->gateway attachment is cross-namespace.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: egress-anthropic
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+      namespace: inference
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: X-Gateway-Base-Model-Name
+              value: claude-haiku-4-5
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: anthropic
+      timeouts:
+        request: 300s

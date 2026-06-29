@@ -1,0 +1,35 @@
+# Real GIE InferencePool + EPP for raw-vLLM. Wave 3 (with the sim pools). releaseName=raw-vllm
+# names the InferencePool CR the cross-namespace HTTPRoute backendRef references. ns=serving so
+# the EPP selects the real GPU pods (same namespace as raw-vllm). OCI Helm chart + git values ref.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-pool-raw-vllm
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  sources:
+    - repoURL: registry.k8s.io/gateway-api-inference-extension/charts
+      chart: inferencepool
+      targetRevision: v1.5.0
+      helm:
+        releaseName: raw-vllm
+        valueFiles:
+          - $values/routing/gateway-api-inference/inferencepool/values-raw-vllm.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

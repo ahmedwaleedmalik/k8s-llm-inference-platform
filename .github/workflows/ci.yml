@@ -1,0 +1,138 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: scripts
+          severity: error
+
+  opentofu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2.0.1
+        with:
+          tofu_version: "1.12.3"
+      - run: tofu fmt -check -recursive infra
+      - run: tofu init -backend=false -input=false
+        working-directory: infra/gke/terraform
+      - run: tofu validate
+        working-directory: infra/gke/terraform
+      - run: tests/gke-terraform-dependencies/run.sh
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: yokawasa/action-setup-kube-tools@9d39563c24d4a419d1a8289c34d6da5a6171252c # v0.13.5
+        with:
+          # helm + kustomize >=5.8 (OCI helmCharts support): platform/kueue renders the upstream
+          # Kueue chart through `kustomize build --enable-helm` to scope its Job/Pod webhooks.
+          kustomize: "5.8.1"
+          kubeconform: "0.6.7"
+          helm: "3.16.4"
+      - name: kustomize build | kubeconform every kustomization
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r k; do
+            d="$(dirname "$k")"
+            echo "==> $d"
+            if ! kustomize build --enable-helm "$d" \
+              | kubeconform -strict -ignore-missing-schemas \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; then
+              echo "FAIL $d"; fail=1
+            fi
+          done < <(find . -name kustomization.yaml -not -path '*/.terraform/*')
+          exit "$fail"
+
+  config-render-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: make render-config
+      - run: git diff --exit-code
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - run: tests/feature-selection/run.sh
+      - run: tests/profile-selection/run.sh
+      - run: tests/secret-store-selection/run.sh
+      - run: tests/gpu-stack-selection/run.sh
+      - run: tests/guardrails-selection/run.sh
+      - run: tests/repo-branch-selection/run.sh
+      - run: tests/fork-init-guard/run.sh
+      - run: tests/serving-image-public/run.sh
+      - run: tests/kserve-app-ownership/run.sh
+
+  secret-scan:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: bridgecrewio/checkov-action@063da70420ab562cb31f661b374a76b6a42ed6b5 # v12
+        with:
+          directory: .
+          framework: kubernetes
+          quiet: true
+          compact: true
+          checkov_version: "3.3.2"
+          output_format: cli
+
+  trivy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          skip-dirs: "**/.terraform"
+
+  tflint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93 # v6
+        with:
+          tflint_version: v0.63.1
+      - run: tflint --init
+        working-directory: infra/gke/terraform
+      - run: tflint
+        working-directory: infra/gke/terraform
+      - run: tflint --init
+        working-directory: infra/hetzner/terraform
+      - run: tflint
+        working-directory: infra/hetzner/terraform

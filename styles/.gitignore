@@ -1,0 +1,5 @@
+# `vale sync` downloads style packages (Google, etc.) here — don't commit them.
+# Keep only the hand-maintained custom config under config/.
+/*
+!/.gitignore
+!/config/

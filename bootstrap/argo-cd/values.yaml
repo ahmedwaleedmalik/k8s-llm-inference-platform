@@ -1,0 +1,55 @@
+configs:
+  params:
+    server.insecure: true
+
+  # SSO via Dex as the identity provider.
+  cm:
+    # Let kustomizations inflate Helm charts (kustomize `helmCharts:`). Needed by platform/kueue,
+    # which wraps the upstream Kueue chart to scope its fail-closed Job/Pod webhooks to opt-in
+    # namespaces (see platform/kueue/kustomization.yaml). No-op for the bare Helm/manifest apps.
+    kustomize.buildOptions: --enable-helm
+    url: https://argocd.ai-platform.wmx.dev
+    # Disable admin login in favor of SSO.
+    admin.enabled: "false"
+    oidc.config: |
+      name: Dex
+      issuer: https://auth.ai-platform.wmx.dev
+      clientID: argocd
+      clientSecret: $argocd-dex-oidc:clientSecret   # dedicated ESO-owned secret (not argocd-secret)
+      requestedScopes: ["openid", "profile", "email", "groups"]
+
+    # Argo defaults an unknown CR to Healthy instantly, so without this the CNPG Cluster (sync-wave 3)
+    # reports Healthy before bootstrap finishes; wave 4's LiteLLM PreSync migration then races initdb,
+    # exits 0, and leaves an empty schema (key-gen 500s, experience layer never starts). Gate the wave
+    # on the Cluster's Ready condition. No-op for non-CNPG backends (no Cluster CR exists).
+    resource.customizations.health.postgresql.cnpg.io_Cluster: |
+      local hs = {}
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        for _, c in ipairs(obj.status.conditions) do
+          if c.type == "Ready" and c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = c.message
+            return hs
+          end
+          if c.type == "Ready" and c.status == "False" then
+            hs.status = "Degraded"
+            hs.message = c.message
+            return hs
+          end
+        end
+      end
+      hs.status = "Progressing"
+      hs.message = "Waiting for CloudNativePG cluster to become Ready"
+      return hs
+  rbac:
+    scopes: "[groups, email]"
+    # Map your Dex identity to admin. Single-operator: match your email; multi-tenant: match a group.
+    policy.csv: |
+      g, admin@ai-platform.wmx.dev, role:admin
+
+# Disabled because the chart's redis-secret-init Helm hook hangs Argo CD once it self-manages this
+# chart (Argo waits forever on the non-Job hook resources). bootstrap/install.sh creates the
+# argocd-redis auth secret instead (create-if-absent). That is upstream's sanctioned path when this
+# hook is off, and required here anyway: Argo CD's own redis must be up before Argo can deploy ESO.
+redisSecretInit:
+  enabled: false

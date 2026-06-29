@@ -1,0 +1,30 @@
+# Inference-aware routing front door: the inference-gateway Gateway (gatewayClassName=agentgateway)
+# + the BBR AgentgatewayPolicy that copies the request-body `model` into the header the HTTPRoutes
+# match on. Shared by the real serving path (routing/.../real) AND the sim demo — extracted from the
+# demo so the real path no longer depends on the demo being synced (ADR-0027).
+# Wave 3: after agentgateway (wave 2) registers the agentgateway GatewayClass; before the HTTPRoutes
+# (real route wave 4) that attach to this Gateway.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/gateway-api-inference/gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

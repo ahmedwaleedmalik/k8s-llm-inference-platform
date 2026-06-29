@@ -1,0 +1,16 @@
+# KEDA operator — event-driven autoscaler. Drives the HPA for vLLM from the Prometheus
+# queue-depth metric (vllm:num_requests_waiting); ADR-0014. Controller-only, no GPU, no
+# workload cost — safe to auto-sync. Keep resources small (single-cluster lab).
+resources:
+  operator:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  metricServer:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi

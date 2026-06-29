@@ -1,0 +1,18 @@
+# auth.<domain> → Dex (ADR-0026). Attaches to the platform-gateway's reserved `auth-https` listener
+# cross-namespace; backendRef is local (Dex svc in this ns) so no ReferenceGrant. ai-platform.wmx.dev → fork-init.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth
+  namespace: dex
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: auth-https
+  hostnames:
+    - auth.ai-platform.wmx.dev
+  rules:
+    - backendRefs:
+        - name: dex
+          port: 5556

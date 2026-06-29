@@ -1,0 +1,13 @@
+# Model cache for the TEI embedding model (~550MB). Persists across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: embeddings-cache
+  namespace: serving
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 5Gi

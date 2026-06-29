@@ -1,0 +1,7 @@
+kserve:
+  # The base kserve-resources chart owns shared KServe objects. The LLMISVC chart defaults would
+  # otherwise render conflicting inferenceservice-config values and shared Argo ownership.
+  createSharedResources: false
+  llmisvc:
+    # gateway-api-crds owns the newer pinned GIE CRDs. The LLMISVC chart bundles older copies.
+    createGIECRDs: false

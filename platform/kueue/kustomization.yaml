@@ -1,0 +1,57 @@
+# Kueue, rendered from the upstream OCI chart, with its Job/Pod admission webhooks scoped to opt-in
+# namespaces. WHY: Kueue's mutating+validating webhooks for batch/v1 Job and v1 Pod ship
+# failurePolicy=Fail and, unscoped, intercept EVERY Job and Pod cluster-wide. During bring-up the
+# CloudNativePG `litellm-pg-1-initdb` Job (and any early Job) races Kueue's not-yet-Ready webhook;
+# the call fails closed, the Job is rejected, and CNPG hard-wedges (one-shot, no retry) -> no DB ->
+# the LiteLLM migration blocks forever. Kueue admission is opt-in anyway (ADR-0002/ADR-0029: only
+# Jobs/Pods carrying kueue.x-k8s.io/queue-name are governed), so the webhook has no business firing
+# on platform infra namespaces (litellm, serving, cnpg-system).
+#
+# Reference: https://github.com/kubernetes-sigs/kueue/issues/5244 https://github.com/kubernetes-sigs/kueue/issues/5260
+#
+# Chart 0.18.1 exposes no failurePolicy or webhook namespaceSelector value, so we patch the rendered
+# webhook configs here. This needs `kustomize.buildOptions: --enable-helm` (set in
+# bootstrap/argo-cd/values.yaml). Only the four cluster-universal webhooks (Job + Pod) are scoped;
+# the framework webhooks (rayjob/pytorchjob/...) fire only when their CRDs exist, which this platform
+# does not install. Namespaces opt in with `llm-platform/kueue-managed: "true"` -- the same label the
+# require-kueue-queue-name kyverno policy gates on, so one label means "Kueue governs this namespace".
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: kueue
+    repo: oci://registry.k8s.io/kueue/charts
+    version: 0.18.1
+    releaseName: kueue
+    namespace: kueue-system
+    valuesFile: values.yaml
+
+patches:
+  - target: { kind: MutatingWebhookConfiguration, name: kueue-mutating-webhook-configuration }
+    patch: |-
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: MutatingWebhookConfiguration
+      metadata: { name: kueue-mutating-webhook-configuration }
+      webhooks:
+        - name: mjob.kb.io
+          namespaceSelector:
+            matchExpressions:
+              - { key: llm-platform/kueue-managed, operator: In, values: ["true"] }
+        - name: mpod.kb.io
+          namespaceSelector:
+            matchExpressions:
+              - { key: llm-platform/kueue-managed, operator: In, values: ["true"] }
+  - target: { kind: ValidatingWebhookConfiguration, name: kueue-validating-webhook-configuration }
+    patch: |-
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingWebhookConfiguration
+      metadata: { name: kueue-validating-webhook-configuration }
+      webhooks:
+        - name: vjob.kb.io
+          namespaceSelector:
+            matchExpressions:
+              - { key: llm-platform/kueue-managed, operator: In, values: ["true"] }
+        - name: vpod.kb.io
+          namespaceSelector:
+            matchExpressions:
+              - { key: llm-platform/kueue-managed, operator: In, values: ["true"] }

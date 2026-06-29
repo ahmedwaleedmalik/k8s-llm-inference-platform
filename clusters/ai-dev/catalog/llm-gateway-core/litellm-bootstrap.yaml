@@ -1,0 +1,63 @@
+# LiteLLM prerequisites: the CNPG Postgres Cluster + ESO secrets. Wave 3: after the CNPG operator
+# (wave 1) registers its CRDs and ESO (wave 1) + the ClusterSecretStore (wave 3) can resolve
+# secrets. The LiteLLM proxy (separate app, wave 4) depends on these being Ready.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm-bootstrap
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/litellm/db
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: litellm
+  ignoreDifferences:
+    # CNPG defaults these fields after admission. Keep app drift focused on the fields we own:
+    # instances, storage.size, bootstrap database/owner/secret, and the managed Grafana role.
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      name: litellm-pg
+      namespace: litellm
+      jsonPointers:
+        - /spec/affinity
+        - /spec/bootstrap/initdb/encoding
+        - /spec/bootstrap/initdb/localeCType
+        - /spec/bootstrap/initdb/localeCollate
+        - /spec/enablePDB
+        - /spec/enableSuperuserAccess
+        - /spec/failoverDelay
+        - /spec/imageName
+        - /spec/logLevel
+        - /spec/managed/roles/0/connectionLimit
+        - /spec/managed/roles/0/inherit
+        - /spec/maxSyncReplicas
+        - /spec/minSyncReplicas
+        - /spec/monitoring
+        - /spec/postgresGID
+        - /spec/postgresUID
+        - /spec/postgresql
+        - /spec/primaryUpdateMethod
+        - /spec/primaryUpdateStrategy
+        - /spec/probes
+        - /spec/replicationSlots
+        - /spec/resources
+        - /spec/smartShutdownTimeout
+        - /spec/startDelay
+        - /spec/stopDelay
+        - /spec/storage/resizeInUseVolumes
+        - /spec/switchoverDelay
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

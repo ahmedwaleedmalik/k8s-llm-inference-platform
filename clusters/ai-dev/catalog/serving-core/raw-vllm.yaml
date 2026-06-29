@@ -1,0 +1,35 @@
+# Raw vLLM — OpenAI-compatible serving on a GPU node. Wave 4: after the Prometheus
+# Operator CRDs (observability, wave 2) so the ServiceMonitor applies, and after
+# external-secrets (wave 1) so the vllm-api-key ExternalSecret resolves.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: raw-vllm
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: serving/raw-vllm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: serving
+  # Manual-sync: a GPU serving workload brought up deliberately, not auto-healed — kills
+  # the cost footgun (selfHeal re-running a scaled-down GPU pod). ignoreDifferences keeps
+  # `make vllm-up/down` replica scaling from showing OutOfSync. See runbook staged-bring-up.md.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: raw-vllm
+      namespace: serving
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true # else a manual sync reapplies replicas:0 and reverts make vllm-up

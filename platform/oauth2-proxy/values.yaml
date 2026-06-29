@@ -1,0 +1,30 @@
+# oauth2-proxy (ADR-0026) — the gateway forward-auth. agentgateway can't do the OIDC *login*
+# redirect itself, so it delegates to oauth2-proxy via an extAuthz policy (see manifests/). oauth2-proxy
+# runs the OIDC dance against Dex and, on success, lets the request through with X-Auth-Request-Email.
+# upstreams=static://202 → it's auth-only (the gateway forwards the real request once authorized).
+# Cookie scoped to .<domain> so one login covers chat/portal/argocd/grafana (single sign-on).
+# Secrets (client-secret, cookie-secret) via ESO (manifests/externalsecret.yaml). ai-platform.wmx.dev → fork-init.
+config:
+  existingSecret: oauth2-proxy-secrets    # keys: client-id, client-secret, cookie-secret
+  configFile: |-
+    provider = "oidc"
+    oidc_issuer_url = "https://auth.ai-platform.wmx.dev"
+    client_id = "oauth2-proxy"
+    email_domains = ["*"]
+    upstreams = ["static://202"]
+    reverse_proxy = true
+    set_xauthrequest = true
+    pass_access_token = false
+    cookie_secure = true
+    cookie_domains = [".ai-platform.wmx.dev"]
+    whitelist_domains = [".ai-platform.wmx.dev"]
+    redirect_url = "https://portal.ai-platform.wmx.dev/oauth2/callback"
+
+sessionStorage:
+  type: cookie
+
+# Tiny, single replica for the lab (HA: 2+ replicas + redis sessionStorage).
+replicaCount: 1
+resources:
+  requests: { cpu: "25m", memory: 64Mi }
+  limits: { cpu: "200m", memory: 128Mi }

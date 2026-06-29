@@ -1,0 +1,17 @@
+# Model cache (HF_HOME) for the KServe predictor. The cluster's shared egress IP gets HF
+# 429-rate-limited; a fresh emptyDir re-downloads on every pod start and re-rolls that dice.
+# Persisting the cache means the model downloads once, then huggingface_hub serves from cache
+# (and falls back to cache even when a revalidation HEAD 429s) — so restarts are HF-independent.
+# RWO is fine: the predictor uses Recreate (single pod at a time). Mirrors raw-vllm's cache.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kserve-model-cache
+  namespace: kserve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 10Gi

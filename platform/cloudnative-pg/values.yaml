@@ -1,0 +1,4 @@
+# CloudNativePG operator (chart 0.28.3 / operator 1.29.1). Defaults suit a single small Postgres.
+# The operator ships its own webhook CA + leaf cert (no cert-manager dependency; ADR-0011 lanes
+# unaffected). Pinned at the Argo app; keep this minimal — tune operator resources here if needed.
+{}

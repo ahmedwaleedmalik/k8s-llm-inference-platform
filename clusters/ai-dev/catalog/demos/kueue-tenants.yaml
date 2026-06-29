@@ -1,0 +1,28 @@
+# Example multi-tenant Kueue queues: team-a/team-b namespaces + their LocalQueue handles onto the
+# shared gpu-cq ClusterQueue (platform/kueue-config). Split out of the platform substrate into the
+# demos layer (ADR-0027) so the base `platform` profile ships only the cluster-scoped
+# quota pool, not example tenants. Wave 3: after the kueue-config ClusterQueue (platform). Free
+# (namespaces + LocalQueue CRs only) — auto-sync.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kueue-tenants
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: workloads/kueue-tenants
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

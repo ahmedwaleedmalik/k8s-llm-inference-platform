@@ -1,0 +1,87 @@
+# Presidio Analyzer — the NER/recognizer engine LiteLLM's `presidio` guardrail calls to DETECT PII
+# (ADR-0034). Stateless HTTP service; loads a spaCy model baked into the image, so first-Ready is slow
+# and memory is the binding resource. No secrets, no outbound calls. Hardening mirrors the
+# mcp-server-everything baseline (nonroot 65532, read-only rootfs + /tmp emptyDir, drop ALL caps).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: presidio-analyzer
+  namespace: guardrails
+  labels:
+    app: presidio-analyzer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: presidio-analyzer
+  template:
+    metadata:
+      labels:
+        app: presidio-analyzer
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: presidio-analyzer
+          image: mcr.microsoft.com/presidio-analyzer:2.2.361@sha256:7e0d954193e820bc3b63e11af4897887ffa88639e368b1e252051f38e3c714cb
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3000"
+            - name: HOME
+              value: /tmp
+            - name: TMPDIR
+              value: /tmp
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            # spaCy model load on cold start is slow; give generous headroom before Ready.
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: presidio-analyzer
+  namespace: guardrails
+  labels:
+    app: presidio-analyzer
+spec:
+  selector:
+    app: presidio-analyzer
+  ports:
+    - port: 3000
+      targetPort: 3000

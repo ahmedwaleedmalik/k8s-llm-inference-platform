@@ -1,0 +1,75 @@
+# Non-secret, per-environment config
+cluster:
+  name: ai-dev
+  projectID: ai-lab
+  location: us-central1-a
+repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+
+repoBranch: main
+
+# Set once a domain is purchased (e.g. ai.example.com). Empty = no public ingress yet.
+domain: "ai-platform.wmx.dev"
+
+# Economic HA tier (ADR-0029 SR3). Run `make resolve-profile` after editing (resolve-groups runs it too).
+#   cost (default) = cheap single-replica lab: litellm 1 replica, no Redis, fail-open budgets, CNPG 1 instance, no backups
+#   dev            = same single-replica lab defaults as cost
+#   prod           = minimal HA: litellm 2 replicas + Redis cache + fail-closed budgets, CNPG instances:3 + scheduled snapshots + PodDisruptionBudgets (litellm proxy + CNPG primary)
+# Validate the prod HA behaviors per docs guides/prod-ha-validation.md.
+profile: cost
+
+# ESO ClusterSecretStore backend. Default gcpsm (GCP Secret Manager). Any other value renders a
+# PLACEHOLDER store with a stubbed provider block you fill yourself per the ESO provider docs
+# (https://external-secrets.io/latest/provider/) — the resolver then stops clobbering your hand-edited
+# store on every run. The store name stays `secret-store`, so every ExternalSecret is unchanged.
+#   gcpsm = GCP Secret Manager (default; rendered with the secret_store_auth knob below)
+#   other = e.g. aws-sm | azure-kv | vault | kubernetes — you own the provider block (see docs)
+secret_backend: gcpsm
+
+# ESO ClusterSecretStore auth (gcpsm only). How the gcpsm backend is authenticated —
+# orthogonal to the backend itself. Run `make resolve-secret-store` after editing (resolve-groups
+# chains it). Renders platform/external-secrets/config/clustersecretstore.yaml.
+#   workload-identity = keyless GKE Workload Identity (the GKE default; no stored credential)
+#   sa-key            = static SA JSON key in Secret `secret-store-key` (off-GKE forks; seed it once,
+#                       see platform/external-secrets/README.md)
+secret_store_auth: workload-identity
+
+# GPU stack provisioning (ADR-0001). Who installs the NVIDIA driver + device-plugin + DCGM.
+# Run `make resolve-groups` after editing — it toggles the gpu-operator group and renders the DCGM
+# scrape target under platform/dcgm-metrics.
+#   gke-managed (default) = GKE node image provides the stack; DCGM metrics from GKE's managed
+#                           dcgm-exporter (gke-managed-system). No operator deployed.
+#   operator              = self-managed: deploy the NVIDIA GPU Operator (driver + toolkit +
+#                           device-plugin + DCGM + NFD) for any non-GKE substrate (Hetzner / bare-metal
+#                           / Vast). DCGM metrics from the operator's own dcgm-exporter ServiceMonitor.
+#   none                  = no GPU stack and no GPU metrics (CPU-only clusters).
+gpu_stack: gke-managed
+
+# Public-edge DNS + TLS. Only consulted once `domain` is set and the `edge` /
+# `external-dns` apps are synced (manual-sync = dormant by default → Tier 0 port-forward, zero deps).
+dns:
+  automate: true # true → sync external-dns (auto records from the gateway HTTPRoutes)
+  provider:
+    cloudflare # none | google | cloudflare
+    #   none      = create A records by hand (HTTP-01 certs, creds-free)
+    #   google    = Cloud DNS, keyless via Workload Identity (GKE-only forks)
+    #   cloudflare= keep DNS on Cloudflare (cloud-portable); 1 scoped token via ESO; DNS-01 + wildcard
+  proxied: false # cloudflare only: keep records DNS-only (grey cloud) so the gateway owns TLS
+
+# Capability selection (ADR-0031). Each flag = does that capability's Argo Applications EXIST.
+features:
+  autoscaling: true # KEDA
+  kserve: true # KServe declarative serving path
+  embeddings: true # TEI embeddings
+  coding-assistant: true # coder-chat/fim/agent (serving)
+  llm-d: false # advanced disaggregated serving: prefill/decode split + KV-aware routing; needs >=2 GPUs
+  identity: true # Dex + oauth2-proxy (needs domain)
+  dns: true # external-dns (needs domain + dns.provider)
+  public-edge: true # public gateway + HTTPRoutes (needs domain)
+  experience: true # open-webui, tabby, key-portal
+  n8n: true # workflow automation surface; manual-sync; AI calls must use LiteLLM vkey
+  demos: true # sim/proof artifacts
+  security: false # NetworkPolicy budget-path lockdown + Kyverno GPU-quota gate (ADR-0029; multi-tenancy)
+  opencost: true # real infra cost (GPU/CPU/mem $) per workload from Prometheus; complements LiteLLM token-spend
+  mcp-gateway: true # governed MCP gateway: one safe MCP server via agentgateway, auth+rate-limit (ADR-0033)
+  guardrails: false # tenant-edge guardrails: Presidio PII masking + prompt-injection block in LiteLLM (ADR-0034)
+  egress: false # external-provider egress (Anthropic via agentgateway) + claude-* model in LiteLLM; needs anthropic-api-key (ADR-0013)

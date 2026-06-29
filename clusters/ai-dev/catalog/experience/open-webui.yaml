@@ -1,0 +1,27 @@
+# Open WebUI — experience-tier chat front door. Auto-sync: the litellm-keys Job (wave 4) mints
+# openwebui-secrets (LiteLLM vkey + WEBUI_SECRET_KEY) before this wave, so no manual seeding is needed.
+# Wave 5 (after litellm-keys).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: open-webui
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: experience/open-webui
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: experience
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

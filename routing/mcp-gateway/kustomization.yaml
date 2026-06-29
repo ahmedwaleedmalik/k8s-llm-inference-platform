@@ -1,0 +1,13 @@
+# Governed MCP gateway profile (ADR-0033). One safe example MCP server, exposed through the shared
+# agentgateway data plane with auth + rate-limit, consumed by the AGENTIC clients (Cline/opencode) — NOT
+# by LiteLLM. MCP is a parallel protocol plane to the OpenAI /v1 LLM path. Tracing is gateway-wide
+# (agentgateway agent config, set via the chart values) — see README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mcp-gateway
+resources:
+  - mcp-server-everything.yaml
+  - backend.yaml
+  - httproute.yaml
+  - policy-auth.yaml
+  - policy-ratelimit.yaml

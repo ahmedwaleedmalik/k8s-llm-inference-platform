@@ -1,0 +1,98 @@
+# Example MCP server (ADR-0033). The MCP *server* is a swappable example — the governed gateway
+# in front of it is the platform substrate. We pick `@modelcontextprotocol/server-everything` because
+# it is the reference server agentgateway's own MCP tutorial uses, and its tools are read-only and
+# side-effect-free (echo / add / get-time / sampling) — nothing touches the filesystem or makes
+# outbound calls, so it is a safe sandboxed demo. Swap this Deployment for a fetch/filesystem/time
+# server without touching the gateway policy: the point is the policy plane, not the tool.
+#
+# Transport = streamableHttp on :3001. The Service carries appProtocol=agentgateway.dev/mcp, which is
+# how the AgentgatewayBackend's service selector recognizes it as an MCP target (vs a plain HTTP svc).
+#
+# NETWORK NOTE: the image is node:20-alpine + `npx -y` → first start pulls the package over the
+# network. If the OPTIONAL security group (ADR-0029 SR1 default-deny NetworkPolicy) is also enabled,
+# this namespace needs an egress allowance to the npm registry, OR pre-bake an image with the package
+# vendored. This group is off the security critical path, so by default there is no NetworkPolicy here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server-everything
+  namespace: mcp-gateway
+  labels:
+    app: mcp-server-everything
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server-everything
+  template:
+    metadata:
+      labels:
+        app: mcp-server-everything
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-server
+          image: node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+          imagePullPolicy: Always
+          command: ["npx", "-y", "@modelcontextprotocol/server-everything", "streamableHttp"]
+          # readOnlyRootFilesystem: npx writes its package cache + unpack dir, so redirect HOME and the
+          # npm cache onto the writable /tmp emptyDir below (nothing else on the image rootfs is written).
+          env:
+            - name: HOME
+              value: /tmp
+            - name: npm_config_cache
+              value: /tmp/.npm
+          ports:
+            - containerPort: 3001
+          readinessProbe:
+            tcpSocket:
+              port: 3001
+            # npx fetches the package on first boot; give it generous headroom before Ready.
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: 3001
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server-everything
+  namespace: mcp-gateway
+  labels:
+    app: mcp-server-everything
+spec:
+  selector:
+    app: mcp-server-everything
+  ports:
+    - port: 3001
+      targetPort: 3001
+      # appProtocol marks this Service as an MCP target for the AgentgatewayBackend service selector.
+      appProtocol: agentgateway.dev/mcp

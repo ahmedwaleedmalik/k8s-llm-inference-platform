@@ -1,0 +1,31 @@
+# Governed MCP gateway profile (ADR-0033) — OPT-IN, off the critical path. Exposes one safe
+# example MCP server through the shared agentgateway data plane with JWT/OIDC (Dex) + rate-limit; the
+# agentic clients (Cline/opencode) consume MCP directly. NOT in the LiteLLM /v1 path.
+#
+# Auto-sync when feature-gated on (`mcp-gateway: true`): sync-wave 5 (after the routing-core gateway in
+# waves 2-4) so it reconciles once the shared agentgateway data plane is up. JWT/OIDC (Dex) auth +
+# rate-limit policies are authored; the live auth flow against agentgateway is confirmed on bring-up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mcp-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/mcp-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mcp-gateway
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

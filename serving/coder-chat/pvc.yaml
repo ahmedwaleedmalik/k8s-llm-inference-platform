@@ -1,0 +1,14 @@
+# Model cache (HF_HOME) for the 7B-Instruct-AWQ weights (~6GB). Separate PVC per model so chat +
+# fim + raw-vllm don't contend on one RWO volume. RWO is fine for a single replica.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coder-chat-model-cache
+  namespace: serving
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # No storageClassName: inherits the cluster default SC (substrate contract).
+  resources:
+    requests:
+      storage: 20Gi

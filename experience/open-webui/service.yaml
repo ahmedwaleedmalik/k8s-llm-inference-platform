@@ -1,0 +1,16 @@
+# Open WebUI front door. No domain yet (config.yaml domain: ""); reach via
+# `kubectl -n experience port-forward svc/open-webui 8080:8080`. Ingress fronts it once a domain exists.
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: experience
+  labels:
+    app.kubernetes.io/name: open-webui
+spec:
+  selector:
+    app.kubernetes.io/name: open-webui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

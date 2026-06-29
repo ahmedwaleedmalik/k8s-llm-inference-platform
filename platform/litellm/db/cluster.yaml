@@ -1,0 +1,35 @@
+# CloudNativePG Postgres for LiteLLM (virtual keys / budgets / spend). Single instance — a
+# mitigated SPOF (LiteLLM runs with allow_requests_on_db_unavailable=true). HA later = bump
+# `instances` to 3, no rewrite. App credentials come from the pre-existing basic-auth secret
+# `litellm-pg-app` (supplied by ESO); the secret's `username` MUST equal `owner`.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: litellm-pg
+  namespace: litellm
+spec:
+  instances: 1
+  storage:
+    size: 5Gi
+    # No storageClass: inherits the cluster default, like every other PVC (substrate contract).
+    # CNPG 1.29.1 bootstraps cleanly on a WaitForFirstConsumer default (verified on
+    # Hetzner hcloud-volumes: litellm-pg Running, PVC Bound), so no Immediate-binding class is needed.
+  bootstrap:
+    initdb:
+      database: litellm
+      owner: litellm
+      secret:
+        name: litellm-pg-app
+  # Least-privilege read-only role for the Grafana spend dashboard. `pg_read_all_data`
+  # (PG≥14 built-in) grants SELECT on all tables without per-table GRANTs — needed because
+  # LiteLLM's tables are created by its runtime migration, after cluster init. passwordSecret is
+  # a basic-auth secret whose `username` MUST equal the role name (`grafana_ro`).
+  managed:
+    roles:
+      - name: grafana_ro
+        ensure: present
+        login: true
+        inRoles:
+          - pg_read_all_data
+        passwordSecret:
+          name: litellm-grafana-ro

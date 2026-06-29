@@ -1,0 +1,44 @@
+# Model-aware routing. The BBR policy (agentgatewaypolicy.yaml) has already lifted the request
+# body's `model` into the X-Gateway-Base-Model-Name header, so these rules route by model name:
+#  - Qwen3-0.6B  -> the model-a InferencePool (vllm-sim).
+#  - Qwen2.5-1.5B -> a 90/10 weighted split across the model-b stable and canary InferencePools
+#    (a version canary; same model name, two pools). Weighted backendRefs is standard Gateway
+#    API — the backends just happen to be InferencePool, so each split target still gets the
+#    EPP's inference-aware endpoint pick. Unknown model -> no rule matches -> 404.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: X-Gateway-Base-Model-Name
+              value: Qwen/Qwen3-0.6B
+      backendRefs:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: vllm-sim
+      timeouts:
+        request: 300s
+    - matches:
+        - headers:
+            - type: Exact
+              name: X-Gateway-Base-Model-Name
+              value: Qwen/Qwen2.5-1.5B-Instruct
+      backendRefs:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: model-b-stable
+          weight: 90
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: model-b-canary
+          weight: 10
+      timeouts:
+        request: 300s

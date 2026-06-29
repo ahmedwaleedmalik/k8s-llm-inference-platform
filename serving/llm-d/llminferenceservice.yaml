@@ -1,0 +1,67 @@
+# llm-d via KServe LLMInferenceService
+# ===== NEEDS >=2 GPUs TO DEMO =====
+# Disaggregation = 1 prefill GPU + 1 decode GPU. On the single-GPU lab (GPUS_ALL_REGIONS=1) only one
+# of the two pools can schedule, so the disaggregation/KV-routing WIN cannot be shown — this manifest
+# demonstrates the mechanism/architecture; the real benchmark needs the 2-GPU substrate (C2/C3).
+apiVersion: serving.kserve.io/v1alpha1
+kind: LLMInferenceService
+metadata:
+  name: qwen-llmd
+  namespace: llm-d
+spec:
+  model:
+    # Same small model as raw-vllm (apples-to-apples for the publishable comparison).
+    # hf:// URI: KServe's storage layer stages the weights; no pre-staged PVC wiring like raw-vllm.
+    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
+    name: qwen2.5-0.5b-instruct
+
+  # Decode pool (the "main" workload). 1 replica = 1 GPU.
+  replicas: 1
+  template:
+    containers:
+      - name: main
+        # llm-d serving image (vLLM + llm-d KV-transfer/sidecar wiring), pinned to KServe's preset.
+        image: ghcr.io/llm-d/llm-d-dev:v0.2.2@sha256:43a20342464c7db46bf6355294fac50505cc68346f4d4c99a962c1f2ee0f26b1
+        resources:
+          requests:
+            cpu: "1"
+            memory: 8Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: "2"
+            memory: 16Gi
+            nvidia.com/gpu: 1
+
+  # Prefill pool (disaggregation): a SEPARATE set of pods that handle the prompt/prefill phase, with
+  # KV transfer to the decode pool. Presence of spec.prefill is what turns on prefill/decode
+  # disaggregation. 1 replica = 1 GPU → total 2 GPUs (1 prefill + 1 decode).
+  prefill:
+    replicas: 1
+    template:
+      containers:
+        - name: main
+          image: ghcr.io/llm-d/llm-d-dev:v0.2.2@sha256:43a20342464c7db46bf6355294fac50505cc68346f4d4c99a962c1f2ee0f26b1
+          resources:
+            requests:
+              cpu: "1"
+              memory: 8Gi
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "2"
+              memory: 16Gi
+              nvidia.com/gpu: 1
+
+  # Router = llm-d's stable endpoint + scheduler + bundled InferencePool/EPP. ALL created in the
+  # `llm-d` ns → this is OWN GIE, isolated from the reference agentgateway+GIE.
+  router:
+    # scheduler: {} → KServe creates the InferencePool + EPP (llm-d-inference-scheduler) with the
+    # default KV/prefix-cache-aware + load-aware scoring. This is the KV-aware routing under test.
+    scheduler: {}
+    # route: {} → KServe generates the HTTPRoute and attaches it to the gateway referenced below.
+    route: {}
+    # Bind to our explicit, isolated Gateway (serving/llm-d/gateway.yaml) rather than letting KServe
+    # mint an unnamed one — keeps the isolation boundary named and reviewable.
+    gateway:
+      refs:
+        - name: llm-d-gateway
+          namespace: llm-d

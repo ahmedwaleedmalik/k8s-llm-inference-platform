@@ -1,0 +1,81 @@
+# Let's Encrypt ClusterIssuers. HTTP-01 solver via the agentgateway `platform-gateway` —
+# creds-free (only needs :80 reachable on the LB). cert-manager creates a temporary HTTPRoute on the
+# gateway to serve the ACME challenge token. Email = admin@<domain> (fork-init fills ai-platform.wmx.dev).
+# Use the `staging` issuer first to avoid Let's Encrypt rate limits, then switch the Gateway annotation
+# to `letsencrypt-prod` once issuance works.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@ai-platform.wmx.dev
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: platform-gateway
+                namespace: experience
+                kind: Gateway
+                group: gateway.networking.k8s.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@ai-platform.wmx.dev
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: platform-gateway
+                namespace: experience
+                kind: Gateway
+                group: gateway.networking.k8s.io
+---
+# Cloudflare DNS-01 issuers. For forks with `dns.provider: cloudflare`: point the
+# platform-gateway's cert-manager.io/cluster-issuer annotation at one of these instead of the HTTP-01
+# issuers above. DNS-01 issues regardless of Cloudflare proxy state (no :80 dependency) and is keyless
+# at the LB. Needs the `cloudflare-api-token` Secret in the cert-manager namespace (ESO-synced; see
+# externalsecret-cloudflare.yaml). Token scopes: Zone:Read + DNS:Edit.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging-dns01
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@ai-platform.wmx.dev
+    privateKeySecretRef:
+      name: letsencrypt-staging-dns01-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod-dns01
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@ai-platform.wmx.dev
+    privateKeySecretRef:
+      name: letsencrypt-prod-dns01-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token

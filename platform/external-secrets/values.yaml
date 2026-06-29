@@ -1,0 +1,6 @@
+# ESO operator Helm values (chart 2.6.0). Single source of truth for the operator config.
+# Workload Identity: bind the controller's KSA to a GCP service account so ESO
+# authenticates to Secret Manager with NO stored credential (IAM only).
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: external-secrets@ai-lab.iam.gserviceaccount.com

@@ -1,0 +1,38 @@
+# external-dns — auto-manages public DNS records from the agentgateway
+# HTTPRoutes. Auto-sync; feature-gated via resolve-groups (only present when domain + dns/identity are
+# enabled) so it stays opt-in without a manual sync step. Multi-source: the upstream chart + git values
+# (Cloudflare path) + the token ExternalSecrets. A google/Cloud-DNS fork edits values (provider: google,
+# keyless) instead.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/external-dns/
+      chart: external-dns
+      targetRevision: 1.21.1
+      helm:
+        valueFiles:
+          - $values/platform/external-dns/values.yaml
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+      targetRevision: main
+      path: platform/external-dns/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

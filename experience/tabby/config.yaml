@@ -1,0 +1,25 @@
+# Tabby config — FIM completion → coder-fim and code-search embeddings → the embeddings model, BOTH
+# through the LiteLLM gateway (one budgeted edge for all coder traffic). The api_key is a LiteLLM
+# VIRTUAL KEY: mint one (LiteLLM /key/generate), then replace __LITELLM_VKEY__ — or template it from a
+# secret via an initContainer. Kept as a placeholder so no key lives in git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tabby-config
+  namespace: experience
+data:
+  config.toml: |
+    # FIM uses the BASE 1.5B model over raw /v1/completions with the Qwen FIM tokens.
+    [model.completion.http]
+    kind = "vllm/completion"
+    model_name = "coder-fim"
+    api_endpoint = "http://litellm.litellm.svc.cluster.local:4000/v1"
+    api_key = "__LITELLM_VKEY__"
+    prompt_template = "<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>"
+
+    # @code search embeddings (TEI nomic-embed-text), also via the gateway.
+    [model.embedding.http]
+    kind = "openai/embedding"
+    model_name = "embeddings"
+    api_endpoint = "http://litellm.litellm.svc.cluster.local:4000/v1"
+    api_key = "__LITELLM_VKEY__"

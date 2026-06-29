@@ -1,0 +1,4 @@
+repoURL: https://github.com/example/repo.git
+cluster: { name: ai-dev, projectID: p, location: us-central1-a }
+features:
+  guardrails: true

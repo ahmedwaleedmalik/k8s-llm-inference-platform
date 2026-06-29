@@ -1,0 +1,23 @@
+# The OIDC login paths on the portal host route to oauth2-proxy (path /oauth2/* is more specific than
+# the portal's catch-all, so it wins). This is the only UNprotected route on portal.<domain> — it IS
+# the auth flow. backendRef is local (oauth2-proxy svc in this ns). ai-platform.wmx.dev → fork-init.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: experience
+      sectionName: portal-https
+  hostnames:
+    - portal.ai-platform.wmx.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /oauth2
+      backendRefs:
+        - name: oauth2-proxy
+          port: 80

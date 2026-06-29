@@ -1,0 +1,30 @@
+# External-provider egress (ADR-0013 Amendment): AIProvider backends + ESO keys + model-matched
+# HTTPRoutes that route external SaaS (claude-haiku) through the same inference-gateway front door as
+# local vLLM. Deliberately NOT an InferencePool path — external SaaS has no KV/queue for GIE to
+# observe. Wave 4: after the inference-gateway Gateway + BBR policy (wave 3) the routes attach to.
+# Feature-gated `egress` group (default off): its anthropic-api-key ExternalSecret needs a real
+# provider key in the backend, so a default fork stays clean — enable with `features.egress: true`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-egress-external
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/gateway-api-inference/egress
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agentgateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

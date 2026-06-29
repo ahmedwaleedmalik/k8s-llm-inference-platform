@@ -1,0 +1,16 @@
+# In-cluster OpenAI-compatible endpoint for the coder FIM model. LiteLLM routes to this Service
+# (platform/litellm/values.yaml model_list: coder-fim). Clients call /v1/completions (NOT chat).
+apiVersion: v1
+kind: Service
+metadata:
+  name: coder-fim
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: coder-fim
+spec:
+  selector:
+    app.kubernetes.io/name: coder-fim
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

@@ -1,0 +1,30 @@
+# Mints the LiteLLM virtual keys the experience apps need, IN-CLUSTER, so open-webui/tabby no longer
+# depend on a human running `make seed-experience` and can auto-sync. A PostSync-hook Job (idempotent:
+# keeps a still-valid key, mints only when missing/invalid) reads the litellm master key cross-namespace
+# read-only and writes the K8s Secrets directly — no GCP Secret Manager, no cloud IAM, portable to any
+# cluster. ADR-0011 holds: the minted value lives only as an in-cluster Secret, never in git or IaC state.
+# Wave 4 — after litellm (the live proxy it mints from), before open-webui/tabby (wave 5).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm-keys
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: experience/litellm-keys
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: experience
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

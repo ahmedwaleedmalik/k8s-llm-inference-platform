@@ -1,0 +1,67 @@
+# SR1 (ADR-0029) — force the budget/quota path. The serving namespace runs the raw model servers
+# (vLLM, coder-chat/fim/agent, embeddings) on `:8000` (/v1 + /metrics). Without a policy any pod can
+# curl a model Service directly and bypass LiteLLM virtual keys + budgets — the economic control is
+# network-bypassable. Default-deny ingress, then allow ONLY the trusted infra namespaces:
+#   - litellm            : the economics edge calls coder-* / embeddings Services directly
+#   - inference          : the GIE Gateway + EPP route qwen-local to vLLM pods (InferencePool)
+#   - agentgateway-system: the agentgateway data-plane controller behind the Gateway
+#   - monitoring         : Prometheus scrapes /metrics on the same :8000 (keep dashboards working)
+# Tenant namespaces (team-*, default, experience, …) are NOT listed → they can only reach LiteLLM.
+# Native networking.k8s.io/v1 (portable across any NetworkPolicy-enforcing CNI; no Cilium CRD lock-in).
+# Enforced only by a NetworkPolicy-capable CNI — on GKE that means Dataplane-V2 (flip at cluster
+# creation, ADR-0028); otherwise authored-but-not-enforced.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: serving-default-deny-ingress
+  namespace: serving
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: serving-allow-trusted-ingress
+  namespace: serving
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: litellm
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inference
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentgateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+---
+# Benchmark exception (ADR-0032): the serving benchmark Jobs (`make bench`, `make bench-guidellm`)
+# deliberately measure the RAW model server, hitting raw-vllm / coder-* / embeddings on :8000 directly
+# instead of through LiteLLM. They run IN this namespace, which the SR1 deny-all above blocks (serving
+# has no same-namespace allow). Scope the exception to exactly the two bench Job pod labels so nothing
+# else gains a direct, budget-bypassing path to the model servers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: serving-allow-benchmark-ingress
+  namespace: serving
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [vllm-bench, guidellm-bench]

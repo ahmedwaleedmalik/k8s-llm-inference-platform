@@ -1,0 +1,5 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Grafana OIDC client-secret ESO, applied as a git-path source by the observability Argo app.
+resources:
+  - externalsecret.yaml

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - service.yaml
+  - externalsecret.yaml
+  - key-minter-rbac.yaml
+  - key-minter-script.yaml
+  - key-minter-job.yaml
+  - deployment-main.yaml
+  - httproute.yaml
+  - forward-auth-policy.yaml
+  - networkpolicy.yaml

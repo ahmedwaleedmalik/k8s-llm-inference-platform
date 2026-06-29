@@ -1,0 +1,38 @@
+# OpenCost values. Real infrastructure cost (CPU/GPU/memory/storage $) per workload and namespace,
+# computed from the in-cluster kube-prometheus Prometheus. Complements LiteLLM token-spend (a proxy)
+# with actual GPU-hours/$, so the platform can show what a model/tenant truly costs to run.
+opencost:
+  exporter:
+    defaultClusterId: ai-dev
+    extraEnv:
+      # On GKE the GCP cost provider panics at init ("Supply a GCP Key") before custom pricing is read.
+      # With cloud-cost disabled + custom pricing on, a placeholder satisfies the init check and no
+      # billing query is ever made; pricing comes from the customPricing cost model below.
+      CLOUD_PROVIDER_API_KEY: "custom"
+  prometheus:
+    # Reuse the existing kube-prometheus Prometheus instead of standing up another one.
+    internal:
+      enabled: true
+      serviceName: observability-kube-prometh-prometheus
+      namespaceName: monitoring
+      port: 9090
+  ui:
+    enabled: true
+  # On GKE, OpenCost's cloud provider otherwise demands a GCP billing key and crashes. Use the built-in
+  # custom-pricing model (on-demand list estimates) so it runs key-free; wire GCP billing export later
+  # for exact figures. Estimates are enough for the cost-awareness story (relative cost per workload).
+  customPricing:
+    enabled: true
+    createConfigmap: true
+    provider: custom
+    costModel:
+      description: "GKE on-demand list estimates (no cloud-billing integration)"
+      CPU: 0.0317
+      spotCPU: 0.0067
+      RAM: 0.00425
+      spotRAM: 0.00089
+      GPU: 0.71
+      storage: 0.00014
+      zoneNetworkEgress: 0.01
+      regionNetworkEgress: 0.01
+      internetNetworkEgress: 0.12

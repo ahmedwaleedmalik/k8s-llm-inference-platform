@@ -1,0 +1,151 @@
+# Coder AGENT endpoint — Qwen2.5-Coder-14B-Instruct, AWQ 4-bit. The agentic tier: multi-step
+# tool-calling (the JSON function-call discipline an agent loop needs) — 7B is fine for chat/FIM but
+# weak at tool use; 14B is the practical floor on a 16GB-RAM L4 host. Tool-calling
+# is OFF by default in vLLM; --enable-auto-tool-choice + the hermes parser turn it on for the Qwen2.5
+# chat template. AWQ-Marlin (Ada/L4) keeps 14B (~9GB) + a 16k KV well inside the L4's 24GB.
+# CAPACITY (host RAM, not GPU): the 32B-AWQ tier (18GB weights) OOM-loads on the g2-standard-4 GPU
+# node's 16GB RAM — it needs a 32GB-RAM host (g2-standard-8); tracked for a deliberate infra bump.
+# Like the other coder models, serve one at a time on the single L4 (memory, not compute — time-
+# slicing won't help co-residency).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coder-agent
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: coder-agent
+  annotations:
+    checkov.io/skip1: CKV_K8S_35=vLLM reads its API key only from the VLLM_API_KEY env var; file-mounted secrets are not supported by the server
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coder-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coder-agent
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+        - name: prestage-weights
+          image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+          imagePullPolicy: Always
+          command:
+            - python3
+            - -c
+            - |
+              from huggingface_hub import snapshot_download as d
+              m = "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ"
+              try:
+                  d(m, local_files_only=True)
+              except Exception:
+                  d(m)
+          env:
+            - name: HF_HOME
+              value: /models
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.23.0@sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f
+          imagePullPolicy: Always
+          args:
+            - --model=Qwen/Qwen2.5-Coder-14B-Instruct-AWQ
+            - --served-model-name=qwen2.5-coder-14b-instruct
+            - --quantization=awq_marlin
+            - --gpu-memory-utilization=0.7    # 14B-AWQ (~9GB) leaves ample VRAM on the L4 for KV
+            - --max-model-len=16384           # 14B frees enough VRAM for a 16k agentic context
+            - --enable-auto-tool-choice       # turn on server-side tool-call parsing...
+            - --tool-call-parser=hermes       # ...with the Qwen2.5 (Hermes-style) function-call parser
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-key
+                  key: api-key
+            - name: HF_HOME
+              value: /models
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp/.cache
+            - name: TRITON_CACHE_DIR
+              value: /tmp/.triton
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "4"
+              memory: 14Gi
+              nvidia.com/gpu: 1
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 120             # 14B load + AWQ + CUDA-graph capture; generous cold-start budget
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: coder-agent-model-cache
+        - name: tmp
+          emptyDir: {}

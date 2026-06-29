@@ -1,0 +1,157 @@
+# Second model (model-b = Qwen2.5-1.5B-Instruct) in two versions so the gateway can both
+# route by model name AND canary-split one model across versions. stable and canary serve the
+# same model name; the version label is what the two InferencePools select on, so the 90/10
+# weighted split in the HTTPRoute is a true version rollout, not a model switch. $0-GPU sims.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-sim-b-stable
+  labels:
+    app: vllm-sim-b
+    version: stable
+  annotations:
+    checkov.io/skip1: CKV_K8S_21=namespace is assigned by the ArgoCD Application destination, not hardcoded
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vllm-sim-b
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: vllm-sim-b
+        version: stable
+        inference.networking.k8s.io/engine-type: vllm
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vllm-sim
+          image: ghcr.io/llm-d/llm-d-inference-sim:v0.8.2@sha256:c3ba435081a4d032676b218ea34eb3a1c54507da0fade2f6297f9c37894fe0d1
+          imagePullPolicy: Always
+          args:
+            - "--model"
+            - "Qwen/Qwen2.5-1.5B-Instruct"
+            - "--port"
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-sim-b-canary
+  labels:
+    app: vllm-sim-b
+    version: canary
+  annotations:
+    checkov.io/skip1: CKV_K8S_21=namespace is assigned by the ArgoCD Application destination, not hardcoded
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-sim-b
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: vllm-sim-b
+        version: canary
+        inference.networking.k8s.io/engine-type: vllm
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vllm-sim
+          image: ghcr.io/llm-d/llm-d-inference-sim:v0.8.2@sha256:c3ba435081a4d032676b218ea34eb3a1c54507da0fade2f6297f9c37894fe0d1
+          imagePullPolicy: Always
+          args:
+            - "--model"
+            - "Qwen/Qwen2.5-1.5B-Instruct"
+            - "--port"
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

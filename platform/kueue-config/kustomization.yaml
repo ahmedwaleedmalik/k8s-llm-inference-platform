@@ -1,0 +1,10 @@
+# Cluster-scoped GPU quota substrate (platform layer). The example tenants (team-a/team-b
+# namespaces + their LocalQueues) moved to workloads/kueue-tenants (demos layer, ADR-0027):
+# the ClusterQueue's namespaceSelector is {} so it admits any namespace's LocalQueue and does not
+# require the tenants to exist.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - resourceflavor.yaml
+  - clusterqueue.yaml
+  - priorityclasses.yaml

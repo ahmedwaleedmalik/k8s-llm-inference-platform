@@ -1,0 +1,20 @@
+# KServe controller (kserve-resources chart v0.19.0). Standard (RawDeployment) mode — no Knative,
+# no Istio (we run neither). Ingress via Gateway API reusing our existing agentgateway provider
+# (enableGatewayApi=true), so KServe creates an HTTPRoute per InferenceService against the
+# kserve-ingress-gateway Gateway (serving/kserve/gateway.yaml, gatewayClassName=agentgateway)
+# instead of pulling in Istio. See ADR-0006 + runbook kserve.md.
+kserve:
+  controller:
+    deploymentMode: Standard
+    gateway:
+      # We route via Gateway API on agentgateway, not Istio — stop the controller from trying to
+      # reconcile an Istio VirtualService (it warns VirtualServiceCRDNotFound otherwise).
+      disableIstioVirtualHost: true
+      ingressGateway:
+        enableGatewayApi: true
+        kserveGateway: kserve/kserve-ingress-gateway
+  # Serve models from digest-pinned OCI artifacts (modelcar) — the cloud-agnostic, big-model-ready
+  # delivery default (ADR-0016). Default-on in v0.19; set explicitly so it survives the chart's
+  # ConfigMap reconcile (single manager — do NOT also kustomize-patch inferenceservice-config).
+  storage:
+    enableModelcar: true

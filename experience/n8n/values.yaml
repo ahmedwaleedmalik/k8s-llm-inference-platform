@@ -1,0 +1,118 @@
+# Official n8n chart values. Lab mode uses standalone SQLite on a PVC: no Redis/Postgres dependency,
+# no workers, and no queue-mode scale-out. Upgrade path = queueMode + external Postgres/Redis later.
+fullnameOverride: n8n
+
+image:
+  repository: docker.n8n.io/n8nio/n8n
+  # Derivation input only; the live image is digest-pinned in manifests/deployment-main.yaml.
+  # Keep this digest in sync with that manifest whenever the tag is bumped.
+  tag: "2.27.4@sha256:cf11c96b0d0089bb24459bf97b445fd7008f41543b673cce4d955f7c0ed8752d"
+  pullPolicy: IfNotPresent
+
+commonLabels:
+  app.kubernetes.io/part-of: llm-platform
+
+queueMode:
+  enabled: false
+
+database:
+  type: sqlite
+  useExternal: false
+
+redis:
+  enabled: false
+
+webhookProcessor:
+  enabled: false
+
+multiMain:
+  enabled: false
+
+taskRunners:
+  enabled: false
+  authToken:
+    existingSecret: n8n-unused-runner-token
+    existingSecretKey: auth-token
+
+strategy:
+  type: Recreate
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 5678
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  accessModes: ["ReadWriteOnce"]
+  size: 5Gi
+
+resources:
+  main:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+securityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+
+rbac:
+  create: false
+
+serviceAccount:
+  create: true
+  name: n8n
+  automountServiceAccountToken: false
+
+networkPolicy:
+  enabled: false
+
+pdb:
+  enabled: false
+
+webhook:
+  enabled: true
+  url: https://n8n.ai-platform.wmx.dev
+  timeout: 120000
+
+executions:
+  data:
+    saveOnError: "all"
+    saveOnSuccess: "none"
+    saveOnProgress: false
+    saveManualExecutions: true
+  pruning:
+    enabled: true
+    maxAge: 168
+    maxCount: 1000
+
+config:
+  timezone: UTC
+  extraEnv:
+    - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
+      value: "true"
+    - name: N8N_DIAGNOSTICS_ENABLED
+      value: "false"
+    - name: N8N_VERSION_NOTIFICATIONS_ENABLED
+      value: "false"
+    - name: N8N_TEMPLATES_ENABLED
+      value: "false"
+    - name: N8N_HIRING_BANNER_ENABLED
+      value: "false"
+    - name: N8N_PROXY_HOPS
+      value: "1"
+    - name: N8N_SECURE_COOKIE
+      value: "true"
+    - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+      value: "true"
+    - name: N8N_RESTRICT_FILE_ACCESS_TO
+      value: /home/node/.n8n
+
+secretRefs:
+  existingSecret: n8n-core-secrets

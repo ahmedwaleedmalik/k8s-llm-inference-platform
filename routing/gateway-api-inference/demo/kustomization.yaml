@@ -1,0 +1,10 @@
+# Sim-only demo workloads. The shared front door (inference-gateway Gateway + BBR policy) lives
+# in ../gateway (routing layer) — this demo's sim HTTPRoute attaches to it, as does the real path.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: inference
+resources:
+  - sim.yaml
+  - sim-model-b.yaml
+  - httproute.yaml
+  - inferenceobjective.yaml

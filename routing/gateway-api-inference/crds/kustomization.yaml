@@ -1,0 +1,10 @@
+# Pinned CRD set for inference-aware routing. Two layers, both frozen at a release tag:
+#   - Gateway API (Gateway/HTTPRoute kinds)            standard channel v1.5.0
+#   - Gateway API Inference Extension (InferencePool   v1.5.0 — InferencePool is GA at
+#     inference.networking.k8s.io/v1; InferenceObjective is x-k8s.io/v1alpha2)
+# ServerSideApply on the consuming Argo app: these CRDs exceed the client-side apply annotation.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
+  - https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.5.0/manifests.yaml

@@ -1,0 +1,16 @@
+# Chart-derived from official n8n Helm chart 1.10.0, rendered with experience/n8n/values.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n
+  namespace: n8n
+  labels:
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/instance: n8n
+    app.kubernetes.io/part-of: llm-platform
+data:
+  TZ: "UTC"
+  DB_TYPE: "sqlite"
+  WEBHOOK_URL: "https://n8n.ai-platform.wmx.dev"
+  N8N_WEBHOOK_TIMEOUT: "120000"
+  N8N_EDITOR_BASE_URL: "https://n8n.ai-platform.wmx.dev"

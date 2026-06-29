@@ -1,0 +1,58 @@
+# PostSync-hook Job: runs after the SA/RBAC/ConfigMap are applied, and re-runs on every sync so it
+# re-verifies the keys (minting only when missing/invalid). BeforeHookCreation clears the prior run.
+# This Job completing is what gates open-webui/tabby (wave 5) — they sync only once their secrets exist.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: litellm-keys
+  namespace: experience
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    checkov.io/skip1: CKV_K8S_8=run-to-completion mint Job; no long-lived process to liveness-probe
+    checkov.io/skip2: CKV_K8S_9=run-to-completion mint Job; no service endpoint to readiness-probe
+    checkov.io/skip3: CKV_K8S_38=the minter needs its ServiceAccount token to read the LiteLLM master key (cross-namespace, read-only) and write the derived secrets via the Kubernetes API
+spec:
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: litellm-keys
+    spec:
+      serviceAccountName: litellm-key-minter
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mint
+          image: alpine/k8s:1.31.1@sha256:dfe8c7a06c41d0b6e8757da99531f8f302e9a2687fa0155af4c4087df585c9c8
+          imagePullPolicy: Always
+          command: ["bash", "/script/mint.sh"]
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: script
+              mountPath: /script
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: script
+          configMap:
+            name: litellm-keys-script
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {}

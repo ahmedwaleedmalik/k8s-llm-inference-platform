@@ -1,0 +1,33 @@
+# Kueue — job-level GPU quota + admission (NOT an autoscaler). Wave 2: the controller +
+# CRDs install here; the queue config (clusters/.../kueue-config.yaml) lands wave 3, after
+# the CRDs exist and the webhook is up.
+#
+# Rendered via a kustomize+helm wrapper (platform/kueue/kustomization.yaml), NOT a bare Helm source:
+# the wrapper scopes Kueue's fail-closed Job/Pod admission webhooks to opt-in namespaces so they can
+# never block platform-infra Jobs (e.g. CNPG's litellm-pg initdb) during bring-up. See that file for
+# the full rationale. Needs `kustomize.buildOptions: --enable-helm` (bootstrap/argo-cd/values.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kueue
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: platform/kueue
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kueue-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # Kueue CRDs exceed the client-side apply annotation limit

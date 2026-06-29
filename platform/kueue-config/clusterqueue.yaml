@@ -1,0 +1,35 @@
+# The shared GPU quota pool. nominalQuota nvidia.com/gpu=1 = the cluster's one physical GPU,
+# so at most one GPU workload is admitted at a time; the next waits IN Kueue (suspended),
+# not at the scheduler. team-a and team-b's LocalQueues both point here, so they compete.
+# Preemption lets a higher WorkloadPriorityClass reclaim the GPU from a lower one.
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: gpu-cq
+spec:
+  namespaceSelector: {} # any namespace's LocalQueue may target this ClusterQueue
+  # No cohort: v1beta2 removed spec.cohort (membership moved to the separate Cohort CRD), and a
+  # single ClusterQueue has nothing to borrow from anyway. Cohorts are the multi-ClusterQueue
+  # extension. Setting spec.cohort here would be silently pruned -> permanent Argo drift.
+  # Explicitly set the webhook defaults so git matches the mutated live object (no Argo drift).
+  queueingStrategy: BestEffortFIFO
+  stopPolicy: None
+  flavorFungibility:
+    whenCanBorrow: MayStopSearch
+    whenCanPreempt: TryNextFlavor
+  preemption:
+    withinClusterQueue: LowerPriority # a high-priority job preempts a running low-priority one
+    reclaimWithinCohort: Any
+    borrowWithinCohort:
+      policy: Never
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: gpu-any
+          resources:
+            - name: cpu
+              nominalQuota: "8"
+            - name: memory
+              nominalQuota: 32Gi
+            - name: nvidia.com/gpu
+              nominalQuota: "1"

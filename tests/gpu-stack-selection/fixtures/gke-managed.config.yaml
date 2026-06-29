@@ -1,0 +1,3 @@
+cluster: { name: ai-dev, projectID: ai-lab, location: us-central1-a }
+repoURL: https://github.com/example/repo.git
+gpu_stack: gke-managed

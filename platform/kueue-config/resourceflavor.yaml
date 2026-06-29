@@ -1,0 +1,15 @@
+# One GPU-agnostic flavor: matches any GPU node (no nodeLabels) and carries the toleration
+# Kueue injects onto admitted pods so they schedule onto the tainted GPU pools (gpu-l4 / gpu-t4).
+# With GPUS_ALL_REGIONS=1 the cluster has exactly one physical GPU, so a single flavor with
+# nominalQuota=1 is the honest model. Splitting into per-pool l4/t4 flavors with
+# flavorFungibility (l4→t4 fallback) is the natural extension once the GPU budget exceeds 1;
+# today that fallback already happens at the autoscaler layer (see ADR-0002 / infra/gke).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: gpu-any
+spec:
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule

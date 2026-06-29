@@ -1,0 +1,17 @@
+# Two tenant namespaces competing for the shared GPU quota. The `llm-platform/kueue-managed: "true"`
+# label is the single opt-in switch: it makes Kueue's (scoped) Job/Pod webhooks fire here AND brings
+# these namespaces under the require-kueue-queue-name kyverno policy. Platform-infra namespaces
+# (litellm, serving, ...) deliberately omit it, so Kueue never gates the platform's own workloads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+  labels:
+    llm-platform/kueue-managed: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b
+  labels:
+    llm-platform/kueue-managed: "true"

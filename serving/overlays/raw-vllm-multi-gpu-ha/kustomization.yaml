@@ -1,0 +1,24 @@
+# Multi-GPU HA overlay for raw-vLLM. Reuses the base unchanged and only
+# patches the replica count + rollout strategy. GATED to a multi-GPU substrate (>=2 GPUs, e.g. the
+# 2-GPU Vast cluster) — do NOT apply on the single-GPU lab (GPUS_ALL_REGIONS=1), where the base's
+# Recreate/1 is correct (a RollingUpdate surge pod could never get a second GPU and would deadlock).
+#
+# Sibling dir (not nested under serving/raw-vllm) so the base's kustomization does not recurse into
+# this overlay — kustomize rejects an overlay placed inside its own base ("cycle detected").
+#
+# The GIE InferencePool is intentionally NOT referenced here: it selects by label
+# `app.kubernetes.io/name: raw-vllm` (routing/.../inferencepool/values-raw-vllm.yaml) and the EPP
+# load-balances across whatever endpoints carry that label. Standing up replica #2 via this overlay
+# is sufficient to prove the EPP fans out across N endpoints — no routing change required.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: serving
+resources:
+  - ../../raw-vllm
+patches:
+  - path: replicas-rollingupdate-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: raw-vllm

@@ -1,0 +1,70 @@
+---
+# hetzner-k3s v2.6.0 cluster config — CPU-only portability proof on Hetzner Cloud.
+# Schema: https://github.com/vitobotta/hetzner-k3s/blob/v2.6.0/docs/Creating_a_cluster.md
+#
+# The HCLOUD_TOKEN env var is required to create the cluster.
+config_format_version: 1
+cluster_name: ai-dev-hetzner
+kubeconfig_path: "./kubeconfig.hetzner"
+k3s_version: v1.33.12+k3s1
+
+networking:
+  ssh:
+    port: 22
+    use_agent: false
+    use_private_ip: false
+    public_key_path: "~/.ssh/id_ed25519.pub"
+    private_key_path: "~/.ssh/id_ed25519"
+  # Firewall: hetzner-k3s opens SSH + API (6443) only to these CIDRs. Tighten to your IP/32
+  # before a real create (0.0.0.0/0 is the permissive lab default).
+  allowed_networks:
+    ssh:
+      - 0.0.0.0/0
+    api:
+      - 0.0.0.0/0
+  public_network:
+    ipv4: true
+    ipv6: true
+  # Private network carries node<->node + LB<->node traffic; lets us leave CNI encryption off.
+  private_network:
+    enabled: true
+    subnet: 10.0.0.0/16
+  # Cilium for native networking.k8s.io/v1 NetworkPolicy parity with GKE Dataplane-V2 (no CRD
+  # lock-in, ADR-0029). mode: cilium disables kube-proxy (Cilium replaces it). encryption off
+  # because the private network already isolates traffic (validator only forces it when the
+  # private network is disabled).
+  cni:
+    enabled: true
+    mode: cilium
+    encryption: false
+    cilium:
+      chart_version: "v1.17.2"
+
+# Embedded etcd on the masters (default). Single master = non-HA control plane, fine for a
+# throwaway proof; bump masters_pool.instance_count to 3 (odd) for an HA control plane.
+datastore:
+  mode: etcd
+
+# Single control plane → allow workloads on it so the small cluster isn't wasting the master.
+schedule_workloads_on_masters: true
+
+masters_pool:
+  instance_type: cpx32   # 4 vCPU / 8 GB (current AMD gen; cpx31/41 are priced-but-not-creatable)
+  instance_count: 1
+  locations:
+    - nbg1
+
+# Fixed pools (autoscaler off): cpx42 = 8 vCPU / 16 GB each, enough headroom for the platform
+# control plane (Argo, ESO, Kueue, KEDA, kube-prometheus-stack) plus CPU vLLM serving.
+worker_node_pools:
+  - name: platform
+    instance_type: cpx42
+    instance_count: 3
+    location: nbg1
+
+# Block accidental `hetzner-k3s delete`; set false (or override) when you actually tear down.
+protect_against_deletion: true
+
+# Single-master proof → no API load balancer (the gateway LB is created in-cluster by the
+# hcloud CCM via a Service type=LoadBalancer, not here).
+create_load_balancer_for_the_kubernetes_api: false

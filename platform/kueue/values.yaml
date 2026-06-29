@@ -1,0 +1,8 @@
+# Kueue controller. We accept the chart defaults and pin only what we rely on:
+#  - enableCertManager: false  -> Kueue's internal cert management (no cert-manager dependency).
+#  - manageJobsWithoutQueueName stays false -> Kueue only governs workloads that opt in via the
+#    `kueue.x-k8s.io/queue-name` label (explicit, no surprise suspension of unrelated Jobs).
+#  - batch/job integration is on by default (our GPU demo uses plain Jobs).
+enableCertManager: false
+controllerManager:
+  replicas: 1

@@ -1,0 +1,12 @@
+# Inference-aware routing front door, shared by the real serving path and the sim demo.
+# Extracted from demo/ (ADR-0027): the inference-gateway Gateway and the BBR policy are NOT
+# demo-only — the real raw-vLLM HTTPRoute (routing/.../real) attaches to this Gateway and matches
+# the X-Gateway-Base-Model-Name header that the BBR policy populates. Keeping them in demo/ made
+# the real path silently depend on the sim demo being synced. They live here in the `routing`
+# layer so every profile from routing up (llm-gateway, full) has a working front door.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: inference
+resources:
+  - gateway.yaml
+  - agentgatewaypolicy.yaml

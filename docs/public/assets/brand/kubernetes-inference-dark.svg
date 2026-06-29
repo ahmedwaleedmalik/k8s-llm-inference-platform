@@ -1,0 +1,7 @@
+<svg width="206" height="34" viewBox="0 0 206 34" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Kubernetes LLM Platform">
+  <rect x="2" y="5" width="24" height="24" rx="5" fill="#2F5FE3"/>
+  <path d="M8 12h12M8 17h9M8 22h12" stroke="#F8FAFC" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M18 17h3.2c1.55 0 2.8 1.25 2.8 2.8V22" stroke="#A7F3D0" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M25.2 8.8 28.5 5.5" stroke="#D7DEE8" stroke-width="2.2" stroke-linecap="round"/>
+  <text x="37" y="23.8" fill="#F8FAFC" font-family="IBM Plex Sans, Arial, sans-serif" font-size="18.4" font-weight="750">K8s LLM Platform</text>
+</svg>

@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and fill in. The token is the ONLY required value.
+# Provide the token out-of-band instead of committing it:  export TF_VAR_hcloud_token=...
+# hcloud_token = "REPLACE_ME"
+
+cluster_name  = "ai-dev-hetzner"
+location_name = "fsn1"
+
+talos_version      = "v1.12.2"
+kubernetes_version = "1.32.0"
+
+control_plane_count       = 1
+control_plane_server_type = "cx22"
+
+worker_count       = 3
+worker_server_type = "cx42"
+
+network_ipv4_cidr = "10.0.0.0/16"

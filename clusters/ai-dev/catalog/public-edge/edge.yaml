@@ -1,0 +1,30 @@
+# Public edge: platform-gateway + Let's Encrypt issuers + HTTPRoutes for
+# chat/api/auth.<domain>. Auto-sync; feature-gated via resolve-groups (only present when domain +
+# dns/identity are enabled) so it stays opt-in without a manual sync step. A fork with config.yaml
+# domain:"" leaves this absent → Tier 0 (port-forward), zero new deps. To go public: set `domain`,
+# `make fork-init` (fills ai-platform.wmx.dev), create the A records (runbook). Wave 5: after the gateway
+# class (routing wave 2) + the backend Services (open-webui/litellm).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: edge
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ahmedwaleedmalik/k8s-llm-inference-platform.git
+    targetRevision: main
+    path: routing/edge
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: experience
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

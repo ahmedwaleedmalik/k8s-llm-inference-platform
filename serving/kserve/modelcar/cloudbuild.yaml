@@ -1,0 +1,33 @@
+# GCP Cloud Build pipeline to build + push the OCI modelcar without a local Docker daemon
+# (the no-local-docker author path; forkers with Docker use scripts/build-modelcar.sh instead).
+#
+#   gcloud builds submit serving/kserve/modelcar \
+#     --config serving/kserve/modelcar/cloudbuild.yaml \
+#     --substitutions=_MODEL=Qwen/Qwen2.5-0.5B-Instruct,_IMAGE=<region>-docker.pkg.dev/<proj>/<repo>/qwen2.5-0.5b:v1
+#
+# After the build, read back the immutable digest to pin in the ISVC:
+#   gcloud artifacts docker images describe <image>:<tag> --format='value(image_summary.digest)'
+substitutions:
+  _MODEL: "Qwen/Qwen2.5-0.5B-Instruct"
+  _IMAGE: "REGION-docker.pkg.dev/PROJECT/REPO/qwen2.5-0.5b:v1"
+steps:
+  # 1. Stage the HF snapshot into data/ (the Dockerfile COPYs data/ -> /models). Exclude the
+  #    PyTorch .pt/.pth checkpoints and the original/ dir — vLLM serves the safetensors; pulling the
+  #    duplicate formats only bloats the image layer (= node disk + first-pull latency).
+  - name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        pip install --no-cache-dir huggingface_hub
+        python -c "from huggingface_hub import snapshot_download; snapshot_download('${_MODEL}', local_dir='data', ignore_patterns=['*.pt','*.pth','original/*'])"
+        ls -la data
+  # 2. Build the modelcar image.
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+  # 3. Push it.
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}"]
+images:
+  - "${_IMAGE}"

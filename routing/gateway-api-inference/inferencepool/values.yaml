@@ -1,0 +1,20 @@
+# GIE InferencePool + Endpoint Picker (EPP), chart pinned at the app (v1.5.0).
+#  - provider.name=none: agentgateway is the gateway provider and discovers the InferencePool
+#    itself, so the chart renders no provider-specific (gke/istio) glue.
+#  - modelServers.matchLabels selects the vLLM backend pods the EPP load-balances across; the
+#    EPP scrapes their vLLM metrics (KV-cache, queue depth) to pick the least-loaded endpoint.
+provider:
+  name: none
+inferencePool:
+  modelServers:
+    matchLabels:
+      app: vllm-sim
+# Chart default is cpu:4/mem:8Gi (sized for a production EPP fronting many GPUs). Our backend is
+# a CPU sim on an e2-standard-4 (4 vCPU total), so right-size down — the EPP is lightweight here.
+inferenceExtension:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

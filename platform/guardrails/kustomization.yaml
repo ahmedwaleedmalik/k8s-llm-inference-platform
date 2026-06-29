@@ -1,0 +1,9 @@
+# Guardrails substrate (ADR-0034). The Presidio analyzer + anonymizer that back LiteLLM's `presidio`
+# PII-masking guardrail. The injection guardrail (litellm_content_filter) is engine-internal to LiteLLM
+# and needs nothing here. Namespace `guardrails` is created by the Argo Application destination.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: guardrails
+resources:
+  - presidio-analyzer.yaml
+  - presidio-anonymizer.yaml

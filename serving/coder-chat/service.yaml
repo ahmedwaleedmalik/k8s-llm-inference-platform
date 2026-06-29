@@ -1,0 +1,16 @@
+# In-cluster OpenAI-compatible endpoint for the coder chat model. LiteLLM routes to this Service
+# (platform/litellm/values.yaml model_list: coder-chat). No domain yet (config.yaml domain: "").
+apiVersion: v1
+kind: Service
+metadata:
+  name: coder-chat
+  namespace: serving
+  labels:
+    app.kubernetes.io/name: coder-chat
+spec:
+  selector:
+    app.kubernetes.io/name: coder-chat
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

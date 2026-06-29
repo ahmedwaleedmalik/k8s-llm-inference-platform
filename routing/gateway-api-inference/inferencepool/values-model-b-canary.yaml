@@ -1,0 +1,16 @@
+# model-b canary InferencePool + EPP. Selects only the canary-version sim pods — the 10% side of
+# the weighted split. Same model name as stable; the version label is the only difference.
+provider:
+  name: none
+inferencePool:
+  modelServers:
+    matchLabels:
+      app: vllm-sim-b
+      version: canary
+inferenceExtension:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
