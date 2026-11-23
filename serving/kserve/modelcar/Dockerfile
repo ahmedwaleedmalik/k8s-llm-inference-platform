@@ -3,7 +3,7 @@
 # /models; KServe symlinks /mnt/models -> /models at serve time (no copy). Build via
 # scripts/build-modelcar.sh (or cloudbuild.yaml for no-local-docker authors), which stages the HF
 # snapshot into ./data/ first. Pin a digest after build — never serve :latest.
-FROM busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+FROM busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
 RUN mkdir -p /models
 COPY data/ /models/
 # Run as a non-root uid (DS-0002). The image only holds read-only weights at /models; KServe
